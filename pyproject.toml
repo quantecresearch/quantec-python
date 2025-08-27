@@ -1,0 +1,30 @@
+[project]
+name = "quantec"
+version = "0.1.0"
+description = "A Python package for working with Quantec EasyData."
+readme = "README.md"
+authors = [{name = "David de Wet", email = "david@quantec.co.za"}]
+license = {file = "LICENSE.txt"}
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.2.6",
+    "pandas>=2.2.3",
+    "pyarrow>=18.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.28.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/quantecresearch/quantec"
+Repository = "https://github.com/quantecresearch/quantec"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-env>=1.0.0",
+]
