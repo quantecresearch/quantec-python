@@ -121,3 +121,5 @@ When working with this client, note these key restrictions:
 - **Date parameters**: start_year/end_year should be year only (e.g., "2020", not "2020-01-01")
 - **Caching**: Only available for grid data, uses hash-based filenames
 - Default production API URL is `https://www.easydata.co.za/api/v3/`
+- We target to use the latest available Python version using uv, currently 3.13
+- When using uv sync, remember to do: `uv sync --extra dev`

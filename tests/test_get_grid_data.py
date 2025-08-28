@@ -17,18 +17,32 @@ class TestGetGridData:
         assert len(result.columns) > 0
 
     def test_get_grid_data_csv_format(self, test_client_csv, test_recipe_pk):
-        """Test grid data retrieval in CSV format."""
+        """Test grid data retrieval in CSV format returns valid CSV that can be loaded as DataFrame."""
         result = test_client_csv.get_grid_data(recipe_pk=test_recipe_pk, resp_format="csv")
         
-        assert isinstance(result, pd.DataFrame)
-        assert not result.empty
+        # Should return raw CSV string
+        assert isinstance(result, str)
+        assert len(result) > 0
+        
+        # CSV should be valid and loadable into DataFrame
+        from io import StringIO
+        df = pd.read_csv(StringIO(result))
+        assert isinstance(df, pd.DataFrame)
+        assert not df.empty
 
     def test_get_grid_data_parquet_format(self, test_client, test_recipe_pk):
-        """Test grid data retrieval in Parquet format."""
+        """Test grid data retrieval in Parquet format returns valid parquet that can be loaded as DataFrame."""
         result = test_client.get_grid_data(recipe_pk=test_recipe_pk, resp_format="parquet")
         
-        assert isinstance(result, pd.DataFrame)
-        assert not result.empty
+        # Should return raw parquet bytes
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+        
+        # Parquet should be valid and loadable into DataFrame
+        from io import BytesIO
+        df = pd.read_parquet(BytesIO(result))
+        assert isinstance(df, pd.DataFrame)
+        assert not df.empty
 
     def test_get_grid_data_json_format_raises_error(self, test_client, test_recipe_pk):
         """Test that JSON format raises error (not supported for grid data)."""
@@ -63,7 +77,7 @@ class TestGetGridData:
         result = test_client.get_grid_data(
             recipe_pk=test_recipe_pk,
             selectdimensionnodes=test_dimension_filter,
-            resp_format="parquet"
+            resp_format="dataframe"
         )
         
         assert isinstance(result, pd.DataFrame)
@@ -74,7 +88,7 @@ class TestGetGridData:
         result = test_client.get_grid_data(
             recipe_pk=test_recipe_pk,
             selectdimensionnodes=test_dimension_filter_w_codes,
-            resp_format="parquet"
+            resp_format="dataframe"
         )
         
         assert isinstance(result, pd.DataFrame)
