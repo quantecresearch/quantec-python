@@ -28,7 +28,7 @@ The project follows a simple modular structure:
   - Other endpoints: JSON responses converted to DataFrame
 - Optional caching system for grid data with hash-based filenames and automatic cache management
 - Advanced filtering via `selectdimensionnodes` parameter for dimension-based grid data filtering
-- Uses environment variables for configuration (QUANTEC_API_KEY, QUANTEC_API_URL)
+- Uses environment variables for configuration (EASYDATA_API_KEY, EASYDATA_API_URL)
 - Comprehensive error handling for network, HTTP, and parsing errors
 - POST/GET request handling - POST for filtered grid data, GET for standard requests
 
@@ -81,8 +81,8 @@ This project uses Python's modern packaging with `pyproject.toml` and hatchling 
 ## Environment Configuration
 
 Required environment variables:
-- `QUANTEC_API_KEY` - API authentication key
-- `QUANTEC_API_URL` - Base URL for the Quantec API
+- `EASYDATA_API_KEY` - API authentication key
+- `EASYDATA_API_URL` - Base URL for the Quantec API (defaults to https://www.easydata.co.za/api/v3/ if not set)
 
 ## Testing
 
@@ -120,3 +120,4 @@ When working with this client, note these key restrictions:
 - **Analysis parameter**: Cannot be used with time series codes (only with selection_pk)
 - **Date parameters**: start_year/end_year should be year only (e.g., "2020", not "2020-01-01")
 - **Caching**: Only available for grid data, uses hash-based filenames
+- Default production API URL is `https://www.easydata.co.za/api/v3/`

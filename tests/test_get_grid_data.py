@@ -32,8 +32,31 @@ class TestGetGridData:
 
     def test_get_grid_data_json_format_raises_error(self, test_client, test_recipe_pk):
         """Test that JSON format raises error (not supported for grid data)."""
-        with pytest.raises(ValueError, match="resp_format must be 'parquet' or 'csv'"):
+        with pytest.raises(ValueError, match="resp_format must be 'dataframe', 'parquet', or 'csv'"):
             test_client.get_grid_data(recipe_pk=test_recipe_pk, resp_format="json")
+
+    def test_get_grid_data_dataframe_format(self, test_client, test_recipe_pk):
+        """Test grid data retrieval in DataFrame format (default)."""
+        result = test_client.get_grid_data(recipe_pk=test_recipe_pk, resp_format="dataframe")
+        
+        assert isinstance(result, pd.DataFrame)
+        assert not result.empty
+
+    def test_get_grid_data_csv_format_returns_string(self, test_client, test_recipe_pk):
+        """Test grid data retrieval in CSV format returns string."""
+        result = test_client.get_grid_data(recipe_pk=test_recipe_pk, resp_format="csv")
+        
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # Should contain CSV headers/data
+        assert "," in result or "\n" in result
+
+    def test_get_grid_data_parquet_format_returns_bytes(self, test_client, test_recipe_pk):
+        """Test grid data retrieval in Parquet format returns bytes."""
+        result = test_client.get_grid_data(recipe_pk=test_recipe_pk, resp_format="parquet")
+        
+        assert isinstance(result, bytes)
+        assert len(result) > 0
 
     def test_get_grid_data_with_dimension_filter(self, test_client, test_recipe_pk, test_dimension_filter):
         """Test grid data retrieval with dimension filtering (levels only)."""
@@ -121,7 +144,7 @@ class TestGetGridData:
 
     def test_get_grid_data_invalid_format_raises_error(self, test_client, test_recipe_pk):
         """Test that invalid response format raises ValueError."""
-        with pytest.raises(ValueError, match="resp_format must be 'parquet' or 'csv'"):
+        with pytest.raises(ValueError, match="resp_format must be 'dataframe', 'parquet', or 'csv'"):
             test_client.get_grid_data(recipe_pk=test_recipe_pk, resp_format="invalid_format")
 
     def test_get_grid_data_invalid_recipe_pk(self, test_client):
