@@ -11,68 +11,38 @@ class TestGetSelections:
         """Test getting selections without any filters."""
         result = test_client.get_selections()
         
-        assert result is not None
-        
-        if isinstance(result, dict):
-            assert "selections" in result
-            selections_list = result["selections"]
-        else:
-            selections_list = result.to_dict("records") if isinstance(result, pd.DataFrame) else result
-        
-        # Should return a list (might be empty)
-        assert isinstance(selections_list, list)
+        # Always returns DataFrame now
+        assert isinstance(result, pd.DataFrame)
 
     def test_get_selections_with_status_filter(self, test_client):
         """Test getting selections with status filter."""
         result = test_client.get_selections(status="PSO")
         
-        assert result is not None
+        # Always returns DataFrame now
+        assert isinstance(result, pd.DataFrame)
         
-        if isinstance(result, dict):
-            selections_list = result["selections"]
-        elif isinstance(result, pd.DataFrame):
-            selections_list = result.to_dict("records")
-        else:
-            selections_list = result
-        
-        # Each selection should have required fields
-        for selection in selections_list:
-            assert "pk" in selection
-            assert "title" in selection
-            assert "code_count" in selection
-            assert "is_owner" in selection
-            assert "owner" in selection
-            assert "status" in selection
+        # Check for required columns
+        required_columns = ["pk", "title", "code_count", "is_owner", "owner", "status"]
+        for column in required_columns:
+            assert column in result.columns
 
     def test_get_selections_private_only(self, test_client):
         """Test getting private selections only."""
         result = test_client.get_selections(status="P")
         
-        assert result is not None
-        
-        if isinstance(result, dict):
-            selections_list = result["selections"]
-        elif isinstance(result, pd.DataFrame):
-            selections_list = result.to_dict("records")
-        else:
-            selections_list = result
+        # Always returns DataFrame now
+        assert isinstance(result, pd.DataFrame)
         
         # All returned selections should be private (status contains 'P')
-        for selection in selections_list:
-            assert selection["status"] in ["P", "Private"]  # API may return different formats
+        if len(result) > 0:
+            assert all(status in ["P", "Private"] for status in result["status"])  # API may return different formats
 
     def test_get_selections_shared_only(self, test_client):
         """Test getting shared selections only."""
         result = test_client.get_selections(status="S")
         
-        assert result is not None
-        
-        if isinstance(result, dict):
-            selections_list = result["selections"]
-        elif isinstance(result, pd.DataFrame):
-            selections_list = result.to_dict("records")
-        else:
-            selections_list = result
+        # Always returns DataFrame now
+        assert isinstance(result, pd.DataFrame)
 
     def test_get_selections_open_only(self, test_client):
         """Test getting open selections only."""
@@ -106,49 +76,39 @@ class TestGetSelections:
         """Test the structure of selections response."""
         result = test_client.get_selections(status="PSO")
         
-        if isinstance(result, dict):
-            selections_list = result["selections"]
-        elif isinstance(result, pd.DataFrame):
-            selections_list = result.to_dict("records")
-        else:
-            selections_list = result
+        # Always returns DataFrame now
+        assert isinstance(result, pd.DataFrame)
         
-        # Check structure of first selection (if any exist)
-        if len(selections_list) > 0:
-            first_selection = selections_list[0]
-            
-            # Check for required transformed fields from the client
-            required_fields = ["item", "pk", "title", "code_count", "is_owner", "owner", "status"]
-            for field in required_fields:
-                assert field in first_selection, f"Missing field: {field}"
-            
-            # Validate field types
-            assert isinstance(first_selection["pk"], int)
-            assert isinstance(first_selection["title"], str)
-            assert isinstance(first_selection["code_count"], int)
-            assert isinstance(first_selection["is_owner"], bool)
+        # Check for required transformed fields from the client
+        required_fields = ["item", "pk", "title", "code_count", "is_owner", "owner", "status"]
+        for field in required_fields:
+            assert field in result.columns, f"Missing field: {field}"
+        
+        # Validate field types (if we have data)
+        if len(result) > 0:
+            assert result["pk"].dtype in ["int64", "Int64"]
+            assert result["title"].dtype == "object"
+            assert result["code_count"].dtype in ["int64", "Int64"]
+            assert result["is_owner"].dtype == "bool"
 
-    def test_get_selections_csv_vs_json_format(self, test_client, test_client_csv):
-        """Test that CSV and JSON formats return equivalent data."""
-        json_result = test_client.get_selections(status="PSO")
-        csv_result = test_client_csv.get_selections(status="PSO")
+    def test_get_selections_consistent_format(self, test_client, test_client_csv):
+        """Test that both clients return consistent DataFrame format."""
+        result1 = test_client.get_selections(status="PSO")
+        result2 = test_client_csv.get_selections(status="PSO")
         
-        # JSON returns dict with 'selections' key, CSV returns DataFrame
-        if isinstance(json_result, dict):
-            json_selections = json_result["selections"]
-        else:
-            json_selections = json_result
+        # Both always return DataFrame now
+        assert isinstance(result1, pd.DataFrame)
+        assert isinstance(result2, pd.DataFrame)
         
-        csv_selections = csv_result.to_dict("records") if isinstance(csv_result, pd.DataFrame) else csv_result
-        
-        # Should have same number of selections
-        assert len(json_selections) == len(csv_selections)
+        # Should have same number of selections and columns
+        assert len(result1) == len(result2)
+        assert result1.columns.tolist() == result2.columns.tolist()
 
 
     def test_get_selections_auth_error_handling(self):
         """Test authentication error handling with invalid API key."""
         client = Client(
-            apikey="invalid_api_key",
+            api_key="invalid_api_key",
             api_url="http://127.0.0.1:8001"
         )
         

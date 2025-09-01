@@ -11,20 +11,20 @@ def test_client():
 
 @pytest.fixture
 def test_client_csv():
-    """Create a test client with CSV format."""
-    return Client(respformat="csv")
+    """Create a test client (CSV is now default for all methods)."""
+    return Client()
 
 
 @pytest.fixture
 def test_client_with_cache():
     """Create a test client with caching enabled."""
-    return Client(respformat="parquet", use_cache=True, cache_dir="test_cache")
+    return Client(use_cache=True, cache_dir="test_cache")
 
 
 @pytest.fixture
 def test_recipe_pk():
     """Recipe PK for TRD01 dataset."""
-    return 53
+    return 1066
 
 
 @pytest.fixture

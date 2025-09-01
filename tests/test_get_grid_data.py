@@ -170,12 +170,12 @@ class TestGetGridData:
     def test_get_grid_data_auth_error_handling(self):
         """Test authentication error handling with invalid API key."""
         client = Client(
-            apikey="invalid_api_key",
+            api_key="invalid_api_key",
             api_url="http://127.0.0.1:8001"
         )
         
         with pytest.raises(requests.HTTPError):
-            client.get_grid_data(recipe_pk=53)
+            client.get_grid_data(recipe_pk=1066)
 
     def test_get_grid_data_post_vs_get_requests(self, test_client, test_recipe_pk, test_dimension_filter, test_dimension_filter_w_codes):
         """Test that filtering uses POST while normal requests use GET."""

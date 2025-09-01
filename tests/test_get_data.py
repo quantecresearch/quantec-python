@@ -25,25 +25,18 @@ class TestGetData:
 
     def test_get_data_with_selection_pk(self, test_client):
         """Test getting data with selection primary key."""
-        # First get available selections
+        # First get available selections (always returns DataFrame)
         selections = test_client.get_selections(status="PSO")
         
-        if isinstance(selections, dict) and "selections" in selections:
-            selections_list = selections["selections"]
-        elif isinstance(selections, pd.DataFrame):
-            selections_list = selections.to_dict("records")
-        else:
-            selections_list = selections
-            
-        if len(selections_list) > 0:
-            selection_pk = selections_list[0]["pk"]
+        assert isinstance(selections, pd.DataFrame)
+        
+        if len(selections) > 0:
+            selection_pk = selections.iloc[0]["pk"]
             result = test_client.get_data(selection_pk=selection_pk)
             
             assert result is not None
-            if isinstance(result, dict):
-                assert len(result) > 0
-            elif isinstance(result, pd.DataFrame):
-                assert not result.empty
+            assert isinstance(result, pd.DataFrame)
+            assert not result.empty
 
     def test_get_data_with_frequency_params(self, test_client, sample_time_series_codes):
         """Test getting data with frequency and date parameters."""
@@ -69,18 +62,13 @@ class TestGetData:
 
     def test_get_data_selection_pk_priority(self, test_client, sample_time_series_codes):
         """Test that selection_pk takes precedence over time_series_codes."""
-        # Get a valid selection first
+        # Get a valid selection first (always returns DataFrame)
         selections = test_client.get_selections(status="PSO")
         
-        if isinstance(selections, dict) and "selections" in selections:
-            selections_list = selections["selections"]
-        elif isinstance(selections, pd.DataFrame):
-            selections_list = selections.to_dict("records")
-        else:
-            selections_list = selections
-            
-        if len(selections_list) > 0:
-            selection_pk = selections_list[0]["pk"]
+        assert isinstance(selections, pd.DataFrame)
+        
+        if len(selections) > 0:
+            selection_pk = selections.iloc[0]["pk"]
             
             # Call with both parameters - selection_pk should take precedence
             result = test_client.get_data(
@@ -89,3 +77,5 @@ class TestGetData:
             )
             
             assert result is not None
+            assert isinstance(result, pd.DataFrame)
+            assert not result.empty

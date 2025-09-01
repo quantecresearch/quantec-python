@@ -21,12 +21,8 @@ class Client:
 
     Parameters
     ----------
-    apikey : Optional[str], optional
+    api_key : Optional[str], optional
         API key. Defaults to EASYDATA_API_KEY env variable.
-    respformat : str, optional
-        Response format ('csv' for time series, 'csv'/'parquet' for grid data). Defaults to 'csv'.
-    is_tidy : bool, optional
-        Return tidy data. Defaults to True.
     api_url : Optional[str], optional
         API base URL. Defaults to EASYDATA_API_URL env variable or https://www.easydata.co.za/api/v3/.
     use_cache : bool, optional
@@ -37,32 +33,26 @@ class Client:
     Raises
     ------
     ValueError
-        If apikey is empty or respformat is invalid.
+        If api_key is empty.
 
     """
 
     def __init__(
         self,
-        apikey: Optional[str] = None,
-        respformat: str = "csv",
-        is_tidy: bool = True,
+        api_key: Optional[str] = None,
         api_url: Optional[str] = None,
         use_cache: bool = False,
         cache_dir: str = "cache",
     ) -> None:
-        apikey = apikey or os.getenv("EASYDATA_API_KEY")
+        api_key = api_key or os.getenv("EASYDATA_API_KEY")
         api_url = api_url or os.getenv("EASYDATA_API_URL") or "https://www.easydata.co.za/api/v3"
-        if not apikey:
+        if not api_key:
             raise ValueError(
-                "API key must be provided via apikey parameter or EASYDATA_API_KEY environment variable"
+                "API key must be provided via api_key parameter or EASYDATA_API_KEY environment variable"
             )
-        if respformat not in ["csv", "json", "parquet"]:
-            raise ValueError("respformat must be 'csv', 'json', or 'parquet'")
 
         self.__version__: str = __version__
-        self.apikey: str = apikey
-        self.respformat: str = respformat
-        self.is_tidy: bool = is_tidy
+        self.api_key: str = api_key
         self.api_url: str = api_url.rstrip("/")
         self.use_cache: bool = use_cache
         self.cache_dir: str = cache_dir
@@ -78,6 +68,8 @@ class Client:
         start_year: str = "",
         end_year: str = "",
         analysis: bool = False,
+        resp_format: str = "csv",
+        is_tidy: bool = True,
     ) -> Union[pd.DataFrame, dict]:
         """
         Fetch data from Quantec API.
@@ -96,6 +88,10 @@ class Client:
             End date ('YYYY-MM-DD'). Defaults to ''.
         analysis : bool, optional
             Include analysis parameter. Defaults to False.
+        resp_format : str, optional
+            Response format ('csv' or 'json'). Defaults to 'csv'.
+        is_tidy : bool, optional
+            Return tidy data. Defaults to True.
 
         Returns
         -------
@@ -122,11 +118,11 @@ class Client:
         url: str = f"{self.api_url}/download/"
 
         query_params: dict[str, Union[str, bool, int]] = {
-            "respFormat": self.respformat,
+            "respFormat": resp_format,
             "freqs": freq,
             "startYear": start_year,
             "endYear": end_year,
-            "isTidy": self.is_tidy,
+            "isTidy": is_tidy,
             "analysis": analysis,
         }
 
@@ -141,7 +137,7 @@ class Client:
 
         try:
             response = requests.get(
-                url, params={**query_params, "auth_token": self.apikey}
+                url, params={**query_params, "auth_token": self.api_key}
             )
             response.raise_for_status()
         except requests.ConnectionError as e:
@@ -151,7 +147,7 @@ class Client:
         except requests.HTTPError as e:
             raise requests.HTTPError(f"API request failed: {response.text}") from e
 
-        if self.respformat == "csv":
+        if resp_format == "csv":
             try:
                 out: pd.DataFrame = (
                     pd.read_csv(StringIO(response.text)).dropna().reset_index()
@@ -216,8 +212,8 @@ class Client:
 
         Returns
         -------
-        Union[pd.DataFrame, dict]
-            DataFrame for CSV, dict for JSON.
+        pd.DataFrame
+            DataFrame containing recipe information.
 
         Raises
         ------
@@ -232,7 +228,7 @@ class Client:
         url: str = f"{self.api_url}/recipes/"
 
         try:
-            response = requests.get(url, params={"auth_token": self.apikey})
+            response = requests.get(url, params={"auth_token": self.api_key})
             response.raise_for_status()
         except requests.ConnectionError as e:
             raise requests.ConnectionError(
@@ -241,17 +237,12 @@ class Client:
         except requests.HTTPError as e:
             raise requests.HTTPError(f"API request failed: {response.text}") from e
 
-        if self.respformat == "csv":
-            try:
-                recipes_data = response.json()
-                out: pd.DataFrame = pd.DataFrame(recipes_data).dropna(axis=1, how="all")
-            except (ValueError, pd.errors.ParserError) as e:
-                raise ValueError("Failed to parse recipes response") from e
-        else:
-            try:
-                out: dict = response.json()
-            except ValueError as e:
-                raise ValueError("Failed to parse JSON response") from e
+        # Always return as DataFrame for recipes
+        try:
+            recipes_data = response.json()
+            out: pd.DataFrame = pd.DataFrame(recipes_data).dropna(axis=1, how="all")
+        except (ValueError, pd.errors.ParserError) as e:
+            raise ValueError("Failed to parse recipes response") from e
 
         log.debug(
             f"Found {len(out) if isinstance(out, pd.DataFrame) else len(out)} recipes"
@@ -279,7 +270,7 @@ class Client:
 
         Returns
         -------
-        Union[pd.DataFrame, dict]
+        pd.DataFrame
             Selection data with transformed fields: item, pk, title,
             code_count, is_owner, owner, status, description, modified.
 
@@ -295,7 +286,7 @@ class Client:
         """
         url: str = f"{self.api_url}/selections/"
 
-        query_params: dict[str, str] = {"auth_token": self.apikey, "format": "json"}
+        query_params: dict[str, str] = {"auth_token": self.api_key, "format": "json"}
 
         if status:
             query_params["status"] = status
@@ -339,10 +330,8 @@ class Client:
         except (ValueError, KeyError, TypeError) as e:
             raise ValueError("Failed to parse selections response") from e
 
-        if self.respformat == "csv":
-            out: pd.DataFrame = pd.DataFrame(selections_data).dropna(axis=1, how="all")
-        else:
-            out: dict = {"selections": selections_data}
+        # Always return as DataFrame for selections
+        out: pd.DataFrame = pd.DataFrame(selections_data).dropna(axis=1, how="all")
 
         log.debug(f"Found {len(selections_data)} selections")
         return out
@@ -354,6 +343,8 @@ class Client:
         is_melted: bool = True,
         resp_format: str = "dataframe",
         selectdimensionnodes: dict = None,
+        has_tscodes: bool = False,
+        has_dncodes: bool = False,
     ) -> Union[pd.DataFrame, str, bytes]:
         """
         Fetch grid/pivot table data using recipe primary key.
@@ -371,6 +362,10 @@ class Client:
         selectdimensionnodes : dict, optional
             Dimension filtering. Example: {"dimension": "d1", "codes": ["CODE1"]}.
             Defaults to None.
+        has_tscodes : bool, optional
+            Include time series codes in response. Defaults to False.
+        has_dncodes : bool, optional
+            Include dimension node codes in response. Defaults to False.
 
         Returns
         -------
@@ -398,7 +393,7 @@ class Client:
         
         # Check cache first
         cache_key = self._generate_cache_key(
-            recipe_pk, is_expanded, is_melted, api_format, selectdimensionnodes
+            recipe_pk, is_expanded, is_melted, api_format, selectdimensionnodes, has_tscodes, has_dncodes
         )
         
         # Check if cached file exists and load raw data
@@ -432,10 +427,12 @@ class Client:
                 "isExpanded": is_expanded,
                 "isMelted": is_melted,
                 "selectdimensionnodes": selectdimensionnodes,
+                "hasTimeSeriesCodes": has_tscodes,
+                "hasDimensionNodeCodes": has_dncodes,
             }
 
             headers = {
-                "Authorization": f"Token {self.apikey}",
+                "Authorization": f"Token {self.api_key}",
                 "Content-Type": "application/json",
             }
 
@@ -456,7 +453,9 @@ class Client:
                 "respFormat": api_format,
                 "isExpanded": is_expanded,
                 "isMelted": is_melted,
-                "auth_token": self.apikey,
+                "auth_token": self.api_key,
+                "hasTimeSeriesCodes": has_tscodes,
+                "hasDimensionNodeCodes": has_dncodes,
             }
 
             log.debug(f"[{recipe_pk}] -- Querying with parameters: {query_params}")

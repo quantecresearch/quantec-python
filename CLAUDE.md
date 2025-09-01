@@ -56,11 +56,11 @@ The project follows a simple modular structure:
    ```python
    # Filter by levels only
    filters = {"dimension": "d3", "levels": [2], "codes": []}
-   grid = client.get_grid_data(recipe_pk=53, selectdimensionnodes=filters)
+   grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
    
    # Filter by levels and specific codes
    filters = {"dimension": "d3", "levels": [1], "codes": ["TRD01-R_FI"]}
-   grid = client.get_grid_data(recipe_pk=53, selectdimensionnodes=filters)
+   grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
    ```
 
 ## Development Commands
@@ -89,7 +89,7 @@ Required environment variables:
 The project includes comprehensive tests (39 total) for all API endpoints using pytest. Test configuration is in `pytest.ini` with environment variables for the local dev backend:
 
 - **Test environment**: Uses local dev backend at `http://127.0.0.1:8001/api/v3`
-- **Test dataset**: TRD01 with `recipe_pk=53`  
+- **Test dataset**: TRD01 with `recipe_pk=1066`  
 - **Test data**: Time series codes `NMS-EC_BUS,NMS-GA_BUS`
 - **Coverage reporting**: HTML reports generated in `htmlcov/`
 - **Test structure**:

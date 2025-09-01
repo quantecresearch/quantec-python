@@ -83,16 +83,10 @@ data = client.get_data(
 # Find available selections
 selections = client.get_selections(status="PSO")  # Private, Shared, Open
 
-# Extract selections list (format depends on response)
-if isinstance(selections, dict) and "selections" in selections:
-    selections_list = selections["selections"]
-else:
-    selections_list = selections
-
-# Use selection for data retrieval
-if len(selections_list) > 0:
-    selection = selections_list[0]
-    data = client.get_data(selection_pk=selection['pk'])
+# Use selection for data retrieval (returns DataFrame)
+if len(selections) > 0:
+    selection_pk = selections.iloc[0]['pk']
+    data = client.get_data(selection_pk=selection_pk)
 ```
 
 ## Grid/Pivot Data
@@ -105,7 +99,7 @@ recipes = client.get_recipes()
 
 # Basic grid data retrieval
 if len(recipes) > 0:
-    recipe_id = recipes[0]['id']
+    recipe_id = recipes.iloc[0]['id']
     grid_data = client.get_grid_data(recipe_pk=recipe_id)
 ```
 
@@ -114,21 +108,24 @@ if len(recipes) > 0:
 ```python
 # Filter by dimension levels only
 filters = {"dimension": "d3", "levels": [2], "codes": []}
-grid_data = client.get_grid_data(recipe_pk=53, selectdimensionnodes=filters)
+grid_data = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
 
 # Filter by levels and specific codes
 filters = {"dimension": "d3", "levels": [1], "codes": ["TRD01-R_FI"]}
-grid_data = client.get_grid_data(recipe_pk=53, selectdimensionnodes=filters)
+grid_data = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
 ```
 
 ### Format Options (CSV/Parquet only)
 
 ```python
-# CSV format (default)
-csv_data = client.get_grid_data(recipe_pk=53, resp_format="csv")
+# DataFrame format (default)
+df_data = client.get_grid_data(recipe_pk=1066)
+
+# CSV format 
+csv_data = client.get_grid_data(recipe_pk=1066, resp_format="csv")
 
 # Parquet format (recommended for large datasets)
-parquet_data = client.get_grid_data(recipe_pk=53, resp_format="parquet")
+parquet_data = client.get_grid_data(recipe_pk=1066, resp_format="parquet")
 ```
 
 ## Caching (Grid Data Only)
@@ -138,10 +135,10 @@ parquet_data = client.get_grid_data(recipe_pk=53, resp_format="parquet")
 cached_client = Client(use_cache=True, cache_dir="./cache")
 
 # First call - fetches from API and caches
-grid_data = cached_client.get_grid_data(recipe_pk=53)
+grid_data = cached_client.get_grid_data(recipe_pk=1066)
 
 # Subsequent calls - loads from cache (faster)
-grid_data = cached_client.get_grid_data(recipe_pk=53)
+grid_data = cached_client.get_grid_data(recipe_pk=1066)
 ```
 
 ## Error Handling
@@ -179,7 +176,7 @@ ts_data = client.get_data(
 recipes = client.get_recipes()
 if len(recipes) > 0:
     grid_data = client.get_grid_data(
-        recipe_pk=recipes[0]['id'],
+        recipe_pk=recipes.iloc[0]['id'],
         resp_format="parquet"
     )
 
@@ -190,7 +187,7 @@ selections = client.get_selections(status="PSO")
 ## Important Notes
 
 - **Time series data**: Only supports CSV format
-- **Grid data**: Only supports CSV and Parquet formats (no JSON)
+- **Grid data**: Supports DataFrame (default), CSV and Parquet formats
 - **Date parameters**: Use year format only (e.g., "2020", not "2020-01-01")
 - **Caching**: Only available for grid data
 - **Dimension filtering**: Must provide at least one of: codes, levels, children, or children_include_self
