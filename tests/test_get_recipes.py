@@ -56,7 +56,7 @@ class TestGetRecipes:
         """Test authentication error handling with invalid API key."""
         client = Client(
             api_key="invalid_api_key",
-            api_url="http://127.0.0.1:8001"
+            api_url="http://127.0.0.1:8001/api/v3"
         )
         
         with pytest.raises(requests.HTTPError):

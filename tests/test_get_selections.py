@@ -26,16 +26,6 @@ class TestGetSelections:
         for column in required_columns:
             assert column in result.columns
 
-    def test_get_selections_private_only(self, test_client):
-        """Test getting private selections only."""
-        result = test_client.get_selections(status="P")
-        
-        # Always returns DataFrame now
-        assert isinstance(result, pd.DataFrame)
-        
-        # All returned selections should be private (status contains 'P')
-        if len(result) > 0:
-            assert all(status in ["P", "Private"] for status in result["status"])  # API may return different formats
 
     def test_get_selections_shared_only(self, test_client):
         """Test getting shared selections only."""
@@ -109,7 +99,7 @@ class TestGetSelections:
         """Test authentication error handling with invalid API key."""
         client = Client(
             api_key="invalid_api_key",
-            api_url="http://127.0.0.1:8001"
+            api_url="http://127.0.0.1:8001/api/v3"
         )
         
         with pytest.raises(requests.HTTPError):

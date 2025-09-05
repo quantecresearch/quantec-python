@@ -54,12 +54,19 @@ The project follows a simple modular structure:
 
 4. **Advanced grid data with filtering**:
    ```python
-   # Filter by levels only
-   filters = {"dimension": "d3", "levels": [2], "codes": []}
+   # Single dimension filter by levels only
+   filters = {"dimension": "d3", "levels": [2]}
    grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
    
-   # Filter by levels and specific codes
+   # Single dimension filter combining codes and levels
    filters = {"dimension": "d3", "levels": [1], "codes": ["TRD01-R_FI"]}
+   grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
+   
+   # Multiple dimension filters
+   filters = [
+       {"dimension": "d1", "codes": ["CODE1", "CODE2"]},
+       {"dimension": "d3", "levels": [2]}
+   ]
    grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
    ```
 
@@ -86,14 +93,14 @@ Required environment variables:
 
 ## Testing
 
-The project includes comprehensive tests (39 total) for all API endpoints using pytest. Test configuration is in `pytest.ini` with environment variables for the local dev backend:
+The project includes comprehensive tests (55 total) for all API endpoints using pytest. Test configuration is in `pytest.ini` with environment variables for the local dev backend:
 
 - **Test environment**: Uses local dev backend at `http://127.0.0.1:8001/api/v3`
 - **Test dataset**: TRD01 with `recipe_pk=1066`  
 - **Test data**: Time series codes `NMS-EC_BUS,NMS-GA_BUS`
 - **Coverage reporting**: HTML reports generated in `htmlcov/`
 - **Test structure**:
-  - `test_get_data.py` - Time series data endpoint tests (CSV only)
+  - `test_get_data.py` - Time series data endpoint tests (dataframe/CSV/JSON formats)
   - `test_get_recipes.py` - Recipe listing endpoint tests
   - `test_get_selections.py` - Selection listing endpoint tests
   - `test_get_grid_data.py` - Grid/pivot data endpoint tests (includes caching, filtering, format restrictions)
@@ -114,7 +121,7 @@ Requires Python >=3.10
 
 When working with this client, note these key restrictions:
 
-- **Time series data**: Only supports CSV format, returns pandas DataFrame
+- **Time series data**: Supports dataframe (default), CSV, and JSON formats
 - **Grid data**: Only supports CSV and Parquet formats (no JSON), returns pandas DataFrame  
 - **Dimension filtering**: Must provide at least one of: codes, levels, children, or children_include_self
 - **Analysis parameter**: Cannot be used with time series codes (only with selection_pk)

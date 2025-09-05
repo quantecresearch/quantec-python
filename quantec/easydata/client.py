@@ -1,8 +1,6 @@
-import hashlib
 import logging
 import os
-from io import StringIO
-from pathlib import Path
+from io import StringIO, BytesIO
 from typing import Optional, Union
 
 import pandas as pd
@@ -10,6 +8,8 @@ import requests
 from dotenv import load_dotenv
 
 from .. import __version__
+from .cache import CacheManager
+from . import validators
 
 load_dotenv()
 
@@ -26,7 +26,7 @@ class Client:
     api_url : Optional[str], optional
         API base URL. Defaults to EASYDATA_API_URL env variable or https://www.easydata.co.za/api/v3/.
     use_cache : bool, optional
-        Enable caching for grid data. Defaults to False.
+        Enable caching for time series and grid data. Defaults to True.
     cache_dir : str, optional
         Directory for cached files. Defaults to 'cache'.
 
@@ -41,11 +41,15 @@ class Client:
         self,
         api_key: Optional[str] = None,
         api_url: Optional[str] = None,
-        use_cache: bool = False,
+        use_cache: bool = True,
         cache_dir: str = "cache",
     ) -> None:
         api_key = api_key or os.getenv("EASYDATA_API_KEY")
-        api_url = api_url or os.getenv("EASYDATA_API_URL") or "https://www.easydata.co.za/api/v3"
+        api_url = (
+            api_url
+            or os.getenv("EASYDATA_API_URL")
+            or "https://www.easydata.co.za/api/v3"
+        )
         if not api_key:
             raise ValueError(
                 "API key must be provided via api_key parameter or EASYDATA_API_KEY environment variable"
@@ -54,23 +58,21 @@ class Client:
         self.__version__: str = __version__
         self.api_key: str = api_key
         self.api_url: str = api_url.rstrip("/")
-        self.use_cache: bool = use_cache
-        self.cache_dir: str = cache_dir
 
-        if use_cache:
-            self._setup_cache()
+        # Initialize cache manager if caching is enabled
+        self.cache = CacheManager(cache_dir) if use_cache else None
 
     def get_data(
         self,
         time_series_codes: Optional[str] = None,
         selection_pk: Optional[int] = None,
-        freq: str = "M",
+        freq: str = "A",
         start_year: str = "",
         end_year: str = "",
         analysis: bool = False,
-        resp_format: str = "csv",
+        resp_format: str = "dataframe",
         is_tidy: bool = True,
-    ) -> Union[pd.DataFrame, dict]:
+    ) -> Union[pd.DataFrame, str, dict]:
         """
         Fetch data from Quantec API.
 
@@ -83,20 +85,20 @@ class Client:
         freq : str, optional
             Data frequency ('M', 'Q', etc.). Defaults to 'M'.
         start_year : str, optional
-            Start date ('YYYY-MM-DD'). Defaults to ''.
+            Start year (yyyy). Defaults to ''.
         end_year : str, optional
-            End date ('YYYY-MM-DD'). Defaults to ''.
+            End year (yyyy). Defaults to ''.
         analysis : bool, optional
             Include analysis parameter. Defaults to False.
         resp_format : str, optional
-            Response format ('csv' or 'json'). Defaults to 'csv'.
+            Response format ('dataframe', 'csv', or 'json'). Defaults to 'dataframe'.
         is_tidy : bool, optional
             Return tidy data. Defaults to True.
 
         Returns
         -------
-        Union[pd.DataFrame, dict]
-            DataFrame for CSV, dict for JSON.
+        Union[pd.DataFrame, str, dict]
+            DataFrame for dataframe format, CSV string for csv format, dict for JSON.
 
         Raises
         ------
@@ -115,10 +117,16 @@ class Client:
                 "Either time_series_codes or selection_pk must be provided"
             )
 
+        if resp_format not in ["dataframe", "csv", "json"]:
+            raise ValueError("resp_format must be 'dataframe', 'csv', or 'json'")
+
+        # Determine API format (use csv for dataframe requests)
+        api_format = "csv" if resp_format == "dataframe" else resp_format
+
         url: str = f"{self.api_url}/download/"
 
         query_params: dict[str, Union[str, bool, int]] = {
-            "respFormat": resp_format,
+            "respFormat": api_format,
             "freqs": freq,
             "startYear": start_year,
             "endYear": end_year,
@@ -135,6 +143,24 @@ class Client:
 
         log.debug(f"[{log_key}] -- Querying with parameters: {query_params}")
 
+        # Caching: attempt to load from cache first
+        cache_key = None
+        if self.cache:
+            cache_key = self.cache.generate_key(
+                "get_data",
+                log_key,
+                freq,
+                start_year,
+                end_year,
+                analysis,
+                resp_format,
+                is_tidy,
+            )
+            cached = self.cache.read(cache_key, resp_format, api_format)
+            if cached is not None:
+                log.debug(f"[{log_key}] -- Loaded get_data from cache")
+                return cached  # type: ignore[return-value]
+
         try:
             response = requests.get(
                 url, params={**query_params, "auth_token": self.api_key}
@@ -147,64 +173,35 @@ class Client:
         except requests.HTTPError as e:
             raise requests.HTTPError(f"API request failed: {response.text}") from e
 
+        # Save raw response to cache after successful request
+        if self.cache and cache_key:
+            self.cache.write(cache_key, api_format, response)
+
+        # Handle return format based on user's request
         if resp_format == "csv":
-            try:
-                out: pd.DataFrame = (
-                    pd.read_csv(StringIO(response.text)).dropna().reset_index()
-                )
-            except pd.errors.ParserError as e:
-                raise ValueError("Failed to parse CSV response") from e
-        else:
+            # Return raw CSV string
+            log.debug(f"[{log_key}] -- Returning raw CSV data")
+            return response.text
+        elif resp_format == "json":
+            # Return JSON dict
             try:
                 out: dict = response.json()
+                log.debug(f"[{log_key}] -- Found {len(out)} items")
+                return out
             except ValueError as e:
                 raise ValueError("Failed to parse JSON response") from e
-
-        log.debug(f"[{log_key}] -- Found {len(out)} rows")
-        return out
-
-    def _setup_cache(self) -> None:
-        """Create cache directory if it doesn't exist."""
-        Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
-
-    def _generate_cache_key(self, *args, debug: bool = False) -> str:
-        """Generate hash-based cache key from arguments."""
-        hash_input = "".join(str(arg) for arg in args)
-        if debug:
-            return f"debug_{hashlib.md5(hash_input.encode()).hexdigest()[:8]}"
-        return hashlib.md5(hash_input.encode()).hexdigest()
-
-    def _load_from_cache(
-        self, cache_key: str, resp_format: str
-    ) -> Optional[pd.DataFrame]:
-        """Load data from cache if it exists."""
-        if not self.use_cache:
-            return None
-
-        cache_path = Path(self.cache_dir) / f"{cache_key}.{resp_format}"
-        if not cache_path.exists():
-            return None
-
-        log.debug(f"Loading from cache: {cache_path}")
-        if resp_format == "parquet":
-            return pd.read_parquet(cache_path)
-        elif resp_format == "csv":
-            return pd.read_csv(cache_path)
-        return None
-
-    def _save_to_cache(
-        self, data: pd.DataFrame, cache_key: str, resp_format: str
-    ) -> None:
-        """Save data to cache."""
-        if not self.use_cache:
-            return
-
-        cache_path = Path(self.cache_dir) / f"{cache_key}.{resp_format}"
-        log.debug(f"Saving to cache: {cache_path}")
-        if resp_format == "parquet":
-            data.to_parquet(cache_path, index=False)
-        elif resp_format == "csv":
-            data.to_csv(cache_path, index=False)
+        else:  # resp_format == "dataframe"
+            # Parse CSV into DataFrame
+            try:
+                out: pd.DataFrame = (
+                    pd.read_csv(StringIO(response.text))
+                    .dropna(how="all")
+                    .reset_index(drop=True)
+                )
+                log.debug(f"[{log_key}] -- Found {len(out)} rows")
+                return out
+            except pd.errors.ParserError as e:
+                raise ValueError("Failed to parse CSV response") from e
 
     def get_recipes(self) -> Union[pd.DataFrame, dict]:
         """
@@ -339,10 +336,10 @@ class Client:
     def get_grid_data(
         self,
         recipe_pk: int,
-        is_expanded: bool = True,
+        is_expanded: bool = False,
         is_melted: bool = True,
         resp_format: str = "dataframe",
-        selectdimensionnodes: dict = None,
+        selectdimensionnodes: Union[dict, list[dict]] = None,
         has_tscodes: bool = False,
         has_dncodes: bool = False,
     ) -> Union[pd.DataFrame, str, bytes]:
@@ -354,13 +351,16 @@ class Client:
         recipe_pk : int
             Recipe primary key identifier.
         is_expanded : bool, optional
-            Return expanded data format. Defaults to True.
+            Return expanded data format. Defaults to False.
         is_melted : bool, optional
             Return melted data format. Defaults to True.
         resp_format : str, optional
             Response format ('dataframe', 'parquet', or 'csv'). Defaults to 'dataframe'.
-        selectdimensionnodes : dict, optional
-            Dimension filtering. Example: {"dimension": "d1", "codes": ["CODE1"]}.
+        selectdimensionnodes : Union[dict, list[dict]], optional
+            Dimension filtering. Single dict or list of dicts for multiple dimensions.
+            Example single: {"dimension": "d1", "codes": ["CODE1"]}.
+            Example multiple: [{"dimension": "d1", "codes": ["CODE1"]}, {"dimension": "d2", "levels": [2]}].
+            Each dict can contain: dimension (required), levels, codes, children, children_include_self.
             Defaults to None.
         has_tscodes : bool, optional
             Include time series codes in response. Defaults to False.
@@ -388,38 +388,40 @@ class Client:
         if resp_format not in ["dataframe", "parquet", "csv"]:
             raise ValueError("resp_format must be 'dataframe', 'parquet', or 'csv'")
 
+        # Validate and normalize dimension filters
+        normalized_filters_str = None
+        if selectdimensionnodes is not None:
+            validators.validate_dimension_filters(selectdimensionnodes)
+
+            # Normalize for caching (only if not empty)
+            if self.cache and selectdimensionnodes:
+                normalized_filters_str = self.cache.normalize_dimension_filters(
+                    selectdimensionnodes
+                )
+
         # Determine API format (use parquet for dataframe requests for efficiency)
         api_format = "parquet" if resp_format == "dataframe" else resp_format
-        
-        # Check cache first
-        cache_key = self._generate_cache_key(
-            recipe_pk, is_expanded, is_melted, api_format, selectdimensionnodes, has_tscodes, has_dncodes
-        )
-        
-        # Check if cached file exists and load raw data
-        if self.use_cache:
-            from pathlib import Path
-            cache_path = Path(self.cache_dir) / f"{cache_key}.{api_format}"
-            if cache_path.exists():
-                log.debug(f"[{recipe_pk}] -- Loading from cache: {cache_path}")
-                
-                if resp_format == "csv":
-                    # Return cached CSV string
-                    return cache_path.read_text()
-                elif resp_format == "parquet":
-                    # Return cached parquet bytes
-                    return cache_path.read_bytes()
-                else:  # resp_format == "dataframe"
-                    # Parse cached file to DataFrame
-                    if api_format == "parquet":
-                        cached_df = pd.read_parquet(cache_path)
-                    else:  # api_format == "csv"
-                        cached_df = pd.read_csv(cache_path)
-                    return cached_df.dropna(axis=1, how="all")
+
+        # Check cache first - use normalized filters for consistent caching
+        cache_key = None
+        if self.cache:
+            cache_key = self.cache.generate_key(
+                recipe_pk,
+                is_expanded,
+                is_melted,
+                api_format,
+                normalized_filters_str,
+                has_tscodes,
+                has_dncodes,
+            )
+            cached_grid = self.cache.read(cache_key, resp_format, api_format)
+            if cached_grid is not None:
+                log.debug(f"[{recipe_pk}] -- Loaded from cache")
+                return cached_grid  # type: ignore[return-value]
 
         url: str = f"{self.api_url}/download/recipes/{recipe_pk}/"
 
-        # Use POST if filtering, GET otherwise
+        # Use POST if filtering (non-empty), GET otherwise
         if selectdimensionnodes:
             # POST request for filtering
             request_data = {
@@ -436,7 +438,14 @@ class Client:
                 "Content-Type": "application/json",
             }
 
-            log.debug(f"[{recipe_pk}] -- POST with filters: {selectdimensionnodes}")
+            filter_count = (
+                1
+                if isinstance(selectdimensionnodes, dict)
+                else len(selectdimensionnodes)
+            )
+            log.debug(
+                f"[{recipe_pk}] -- POST with {filter_count} dimension filter(s): {selectdimensionnodes}"
+            )
 
             try:
                 response = requests.post(url, json=request_data, headers=headers)
@@ -470,14 +479,9 @@ class Client:
             except requests.HTTPError as e:
                 raise requests.HTTPError(f"API request failed: {response.text}") from e
 
-        # Save raw response to cache first
-        if self.use_cache:
-            cache_path = Path(self.cache_dir) / f"{cache_key}.{api_format}"
-            log.debug(f"[{recipe_pk}] -- Saving to cache: {cache_path}")
-            if api_format == "parquet":
-                cache_path.write_bytes(response.content)
-            else:  # api_format == "csv"
-                cache_path.write_text(response.text)
+        # Save raw response to cache
+        if self.cache and cache_key:
+            self.cache.write(cache_key, api_format, response)
 
         # Handle return format based on user's request
         if resp_format == "csv":
@@ -492,7 +496,6 @@ class Client:
             # Parse into DataFrame and apply cleaning
             if api_format == "parquet":
                 try:
-                    from io import BytesIO
                     out: pd.DataFrame = pd.read_parquet(BytesIO(response.content))
                 except Exception as e:
                     raise ValueError("Failed to parse parquet response") from e

@@ -1,6 +1,6 @@
 import os
 import pytest
-from quantec.easydata.client import Client
+from quantec.easydata import Client
 
 
 @pytest.fixture
@@ -37,6 +37,21 @@ def test_dimension_filter():
 def test_dimension_filter_w_codes():
     """Dimension filter payload for testing."""
     return {"dimension": "d3", "levels": [1], "codes": ["TRD01-R_FI"]}
+
+
+@pytest.fixture
+def test_multiple_dimension_filters():
+    """Multiple dimension filters for testing."""
+    return [
+        {"dimension": "d1", "codes": ["TRD01-F_M"]},
+        {"dimension": "d3", "levels": [2]},
+    ]
+
+
+@pytest.fixture
+def test_invalid_dimension_filter():
+    """Invalid dimension filter for testing validation."""
+    return {"dimension": "invalid", "levels": [1]}
 
 
 @pytest.fixture

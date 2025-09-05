@@ -12,6 +12,15 @@ dist/
 venv/
 .venv/
 
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Cache directories
+cache/
+test_cache/
+
 # IDEs
 .idea/
 .vscode/

@@ -7,21 +7,41 @@ from quantec.easydata.client import Client
 class TestGetData:
     """Test cases for the get_data endpoint."""
 
-    def test_get_data_with_time_series_codes_csv(self, test_client, sample_time_series_codes):
-        """Test getting data with time series codes (CSV format only for time series)."""
+    def test_get_data_with_time_series_codes_dataframe(self, test_client, sample_time_series_codes):
+        """Test getting data with time series codes (default dataframe format)."""
         result = test_client.get_data(time_series_codes=sample_time_series_codes)
         
-        # Default client uses CSV format, which returns DataFrame
+        # Default format is now dataframe, which returns DataFrame
         assert isinstance(result, pd.DataFrame)
         assert not result.empty
         assert len(result.columns) > 0
 
-    def test_get_data_with_time_series_codes_csv(self, test_client_csv, sample_time_series_codes):
+    def test_get_data_with_time_series_codes_csv(self, test_client, sample_time_series_codes):
         """Test getting data with time series codes in CSV format."""
-        result = test_client_csv.get_data(time_series_codes=sample_time_series_codes)
+        result = test_client.get_data(time_series_codes=sample_time_series_codes, resp_format="csv")
         
-        assert isinstance(result, pd.DataFrame)
-        assert not result.empty
+        # CSV format should return string
+        assert isinstance(result, str)
+        assert len(result) > 0
+        
+        # CSV should be valid and loadable into DataFrame
+        from io import StringIO
+        df = pd.read_csv(StringIO(result))
+        assert isinstance(df, pd.DataFrame)
+        assert not df.empty
+
+    def test_get_data_with_time_series_codes_json(self, test_client, sample_time_series_codes):
+        """Test getting data with time series codes in JSON format."""
+        result = test_client.get_data(time_series_codes=sample_time_series_codes, resp_format="json")
+        
+        # JSON format should return dict
+        assert isinstance(result, dict)
+        assert len(result) > 0
+
+    def test_get_data_invalid_format_raises_error(self, test_client, sample_time_series_codes):
+        """Test that invalid response format raises ValueError."""
+        with pytest.raises(ValueError, match="resp_format must be 'dataframe', 'csv', or 'json'"):
+            test_client.get_data(time_series_codes=sample_time_series_codes, resp_format="invalid_format")
 
     def test_get_data_with_selection_pk(self, test_client):
         """Test getting data with selection primary key."""
