@@ -249,8 +249,6 @@ class Client:
     def get_selections(
         self,
         status: Optional[str] = None,
-        show: Optional[str] = None,
-        filter: Optional[str] = None,
     ) -> Union[pd.DataFrame, dict]:
         """
         Fetch user's available selections from Quantec API.
@@ -259,11 +257,7 @@ class Client:
         ----------
         status : Optional[str], optional
             Filter by selection status using combined flags:
-            U=Unsaved, P=Private, S=Shared, O=Open (e.g., "PSO").
-        show : Optional[str], optional
-            Show specific selection types ("shared" or "open").
-        filter : Optional[str], optional
-            Apply additional filters (e.g., "active").
+            U=Unsaved, P=Private, S=Shared, O=Open, W=Owner (e.g., "PSO").
 
         Returns
         -------
@@ -287,10 +281,6 @@ class Client:
 
         if status:
             query_params["status"] = status
-        if show:
-            query_params["show"] = show
-        if filter:
-            query_params["filter"] = filter
 
         log.debug(f"Querying selections with parameters: {query_params}")
 
@@ -342,6 +332,7 @@ class Client:
         selectdimensionnodes: Union[dict, list[dict]] = None,
         has_tscodes: bool = False,
         has_dncodes: bool = False,
+        freq: Optional[str] = None,
     ) -> Union[pd.DataFrame, str, bytes]:
         """
         Fetch grid/pivot table data using recipe primary key.
@@ -366,6 +357,8 @@ class Client:
             Include time series codes in response. Defaults to False.
         has_dncodes : bool, optional
             Include dimension node codes in response. Defaults to False.
+        freq : Optional[str], optional
+            Data frequency ('M', 'Q', 'A'). Defaults to None.
 
         Returns
         -------
@@ -413,6 +406,7 @@ class Client:
                 normalized_filters_str,
                 has_tscodes,
                 has_dncodes,
+                freq,
             )
             cached_grid = self.cache.read(cache_key, resp_format, api_format)
             if cached_grid is not None:
@@ -422,7 +416,7 @@ class Client:
         url: str = f"{self.api_url}/download/recipes/{recipe_pk}/"
 
         # Use POST if filtering (non-empty), GET otherwise
-        if selectdimensionnodes:
+        if selectdimensionnodes is not None:
             # POST request for filtering
             request_data = {
                 "respFormat": api_format,
@@ -432,6 +426,8 @@ class Client:
                 "hasTimeSeriesCodes": has_tscodes,
                 "hasDimensionNodeCodes": has_dncodes,
             }
+            if freq is not None:
+                request_data["valueSelect"] = freq
 
             headers = {
                 "Authorization": f"Token {self.api_key}",
@@ -466,6 +462,8 @@ class Client:
                 "hasTimeSeriesCodes": has_tscodes,
                 "hasDimensionNodeCodes": has_dncodes,
             }
+            if freq is not None:
+                query_params["valueSelect"] = freq
 
             log.debug(f"[{recipe_pk}] -- Querying with parameters: {query_params}")
 

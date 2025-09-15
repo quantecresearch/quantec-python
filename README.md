@@ -82,7 +82,7 @@ client = Client(
   - Returns: DataFrame when `resp_format="csv"`, dict when `resp_format="json"`.
 
 - get_selections: Fetch user selections.
-  - Parameters: `status: Optional[str] = None`, `show: Optional[str] = None`, `filter: Optional[str] = None`.
+  - Parameters: `status: Optional[str] = None` (status flags: U=Unsaved, P=Private, S=Shared, O=Open, W=Owner - e.g., "PSW" for Private and Shared selections owned by user).
   - Returns: DataFrame of selections.
 
 ### Direct Access with Codes
@@ -114,6 +114,8 @@ json_data = client.get_data(time_series_codes="NMS-EC_BUS", resp_format="json") 
 ```python
 # Find available selections
 selections = client.get_selections(status="PSO")  # Private, Shared, Open
+# Or get only private and shared selections owned by user
+selections = client.get_selections(status="PSW")  # Private, Shared, Owner
 
 # Use selection for data retrieval (returns DataFrame)
 if len(selections) > 0:
@@ -130,7 +132,7 @@ if len(selections) > 0:
   - Returns: DataFrame of recipes.
 
 - get_grid_data: Fetch grid/pivot data by recipe.
-  - Parameters: `recipe_pk: int`, `is_expanded: bool = False`, `is_melted: bool = True`, `resp_format: str = "dataframe"`, `selectdimensionnodes: dict | None = None`, `has_tscodes: bool = False`, `has_dncodes: bool = False`.
+  - Parameters: `recipe_pk: int`, `is_expanded: bool = False`, `is_melted: bool = True`, `resp_format: str = "dataframe"`, `selectdimensionnodes: dict | None = None`, `has_tscodes: bool = False`, `has_dncodes: bool = False`, `freq: Optional[str] = None`.
   - Returns: DataFrame when `resp_format="dataframe"`, CSV string when `"csv"`, bytes when `"parquet"`.
 
 ### Basic Grid Data Access
@@ -143,6 +145,14 @@ recipes = client.get_recipes()
 if len(recipes) > 0:
     recipe_id = recipes.iloc[0]['id']
     grid_data = client.get_grid_data(recipe_pk=recipe_id)
+    
+# Grid data with frequency
+if len(recipes) > 0:
+    recipe_id = recipes.iloc[0]['id']
+    grid_data = client.get_grid_data(
+        recipe_pk=recipe_id,
+        freq="Q"  # Quarterly data
+    )
 ```
 
 ### Grid Data with Filtering
@@ -261,7 +271,7 @@ ts_data = client.get_data(
 )
 
 # 2. Get selections for discovery
-selections = client.get_selections(status="PSO")
+selections = client.get_selections(status="PSO")  # Private, Shared, Open
 # selections.head()
 
 selection_pk = int(selections.loc[selections.title == "CPI overview", "pk"].iloc[0])
