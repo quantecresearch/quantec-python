@@ -9,7 +9,7 @@ class TestGetGridData:
     """Test cases for the get_grid_data endpoint."""
 
     def test_get_grid_data_basic(self, test_client, test_recipe_pk):
-        """Test basic grid data retrieval."""
+        """Test basic grid data retrieval (async mode default)."""
         result = test_client.get_grid_data(recipe_pk=test_recipe_pk)
 
         assert isinstance(result, pd.DataFrame)
@@ -92,7 +92,7 @@ class TestGetGridData:
         """Test grid data retrieval with dimension filtering (levels only)."""
         result = test_client.get_grid_data(
             recipe_pk=test_recipe_pk,
-            selectdimensionnodes=test_dimension_filter,
+            selectdimensionnodes=[test_dimension_filter],  # Wrap in list for API
             resp_format="dataframe",
         )
 
@@ -105,7 +105,7 @@ class TestGetGridData:
         """Test grid data retrieval with dimension filtering (levels and codes)."""
         result = test_client.get_grid_data(
             recipe_pk=test_recipe_pk,
-            selectdimensionnodes=test_dimension_filter_w_codes,
+            selectdimensionnodes=[test_dimension_filter_w_codes],  # Wrap in list for API
             resp_format="dataframe",
         )
 
@@ -211,12 +211,12 @@ class TestGetGridData:
 
         # Filtered request with levels (should use POST)
         result2 = test_client.get_grid_data(
-            recipe_pk=test_recipe_pk, selectdimensionnodes=test_dimension_filter
+            recipe_pk=test_recipe_pk, selectdimensionnodes=[test_dimension_filter]  # Wrap in list for API
         )
 
         # Filtered request with levels and codes (should use POST)
         result3 = test_client.get_grid_data(
-            recipe_pk=test_recipe_pk, selectdimensionnodes=test_dimension_filter_w_codes
+            recipe_pk=test_recipe_pk, selectdimensionnodes=[test_dimension_filter_w_codes]  # Wrap in list for API
         )
 
         # All should return valid DataFrames
@@ -448,3 +448,118 @@ class TestGetGridData:
         # Verify all cache files are removed
         cache_files_after = list(cache_dir.glob("*.parquet"))
         assert len(cache_files_after) == 0, "All cache files should be removed"
+
+    def test_get_grid_data_sync_mode_explicit(self, test_client, test_recipe_pk):
+        """Test that synchronous mode still works when explicitly requested."""
+        result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=False  # Explicitly use sync mode
+        )
+
+        assert isinstance(result, pd.DataFrame)
+        assert not result.empty
+        assert len(result.columns) > 0
+
+
+class TestGetGridDataAsync:
+    """Test cases for async download functionality (integration tests with dev server)."""
+
+    def test_get_grid_data_async_basic(self, test_client, test_recipe_pk):
+        """Test basic async grid data retrieval."""
+        result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=True,
+            resp_format="dataframe",
+            poll_interval=0.5,  # Poll every 0.5 seconds
+        )
+
+        assert isinstance(result, pd.DataFrame)
+        assert not result.empty
+        assert len(result.columns) > 0
+
+    def test_get_grid_data_async_with_filters(
+        self, test_client, test_recipe_pk, test_multiple_dimension_filters
+    ):
+        """Test async download with dimension filters (POST request)."""
+        result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            selectdimensionnodes=test_multiple_dimension_filters,
+            use_async=True,
+            resp_format="dataframe",
+            poll_interval=0.5,
+        )
+
+        assert isinstance(result, pd.DataFrame)
+
+    def test_get_grid_data_async_csv_format(self, test_client, test_recipe_pk):
+        """Test async download returns CSV format correctly."""
+        result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=True,
+            resp_format="csv",
+            poll_interval=0.5,
+        )
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+        assert "," in result or "\n" in result
+
+    def test_get_grid_data_async_parquet_format(self, test_client, test_recipe_pk):
+        """Test async download returns Parquet format correctly."""
+        result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=True,
+            resp_format="parquet",
+            poll_interval=0.5,
+        )
+
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_get_grid_data_async_vs_sync_same_result(self, test_client, test_recipe_pk):
+        """Test that async and sync modes return the same data."""
+        # Get data synchronously
+        sync_result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=False,
+            resp_format="dataframe",
+        )
+
+        # Get data asynchronously
+        async_result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=True,
+            resp_format="dataframe",
+            poll_interval=0.5,
+        )
+
+        # Results should be identical
+        pd.testing.assert_frame_equal(sync_result, async_result)
+
+    def test_get_grid_data_async_with_caching(
+        self, test_client_with_cache, test_recipe_pk
+    ):
+        """Test that async downloads are properly cached."""
+        # First call with async
+        result1 = test_client_with_cache.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=True,
+            poll_interval=0.5,
+        )
+
+        # Check cache was created
+        from pathlib import Path
+
+        cache_dir = Path("test_cache")
+        cache_files = list(cache_dir.glob("*.parquet"))
+        assert len(cache_files) > 0
+
+        # Second call should load from cache (much faster, no async download)
+        result2 = test_client_with_cache.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            use_async=True,
+            poll_interval=0.5,
+        )
+
+        # Results should be identical
+        pd.testing.assert_frame_equal(result1, result2)

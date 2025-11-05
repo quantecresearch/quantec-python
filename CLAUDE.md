@@ -57,17 +57,43 @@ The project follows a simple modular structure:
    # Single dimension filter by levels only
    filters = {"dimension": "d3", "levels": [2]}
    grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
-   
+
    # Single dimension filter combining codes and levels
    filters = {"dimension": "d3", "levels": [1], "codes": ["TRD01-R_FI"]}
    grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
-   
+
    # Multiple dimension filters
    filters = [
        {"dimension": "d1", "codes": ["CODE1", "CODE2"]},
        {"dimension": "d3", "levels": [2]}
    ]
    grid = client.get_grid_data(recipe_pk=1066, selectdimensionnodes=filters)
+   ```
+
+5. **Grid data download** (async mode enabled by default):
+   ```python
+   # Async mode is default - no timeouts for large downloads!
+   grid = client.get_grid_data(recipe_pk=1066)
+
+   # Works with filters too
+   filters = [{"dimension": "d1", "codes": ["CODE1"]}]
+   grid = client.get_grid_data(
+       recipe_pk=1066,
+       selectdimensionnodes=filters
+   )
+
+   # Optional: disable async for small downloads
+   grid = client.get_grid_data(
+       recipe_pk=1066,
+       use_async=False  # Use synchronous mode
+   )
+
+   # Optional: customize polling behavior
+   grid = client.get_grid_data(
+       recipe_pk=1066,
+       poll_interval=10.0,     # Poll every 10 seconds
+       max_poll_attempts=300   # Wait up to 50 minutes
+   )
    ```
 
 ## Development Commands
@@ -93,18 +119,18 @@ Required environment variables:
 
 ## Testing
 
-The project includes comprehensive tests (55 total) for all API endpoints using pytest. Test configuration is in `pytest.ini` with environment variables for the local dev backend:
+The project includes comprehensive tests for all API endpoints using pytest. Test configuration is in `pytest.ini` with environment variables for the local dev backend:
 
 - **Test environment**: Uses local dev backend at `http://127.0.0.1:8001/api/v3`
-- **Test dataset**: TRD01 with `recipe_pk=1066`  
+- **Test dataset**: TRD01 with `recipe_pk=1066`
 - **Test data**: Time series codes `NMS-EC_BUS,NMS-GA_BUS`
 - **Coverage reporting**: HTML reports generated in `htmlcov/`
 - **Test structure**:
   - `test_get_data.py` - Time series data endpoint tests (dataframe/CSV/JSON formats)
   - `test_get_recipes.py` - Recipe listing endpoint tests
   - `test_get_selections.py` - Selection listing endpoint tests
-  - `test_get_grid_data.py` - Grid/pivot data endpoint tests (includes caching, filtering, format restrictions)
-- **Key test coverage**: Dimension filtering with both levels-only and levels+codes variants, caching system, POST/GET request patterns, format restrictions, error validation
+  - `test_get_grid_data.py` - Grid/pivot data endpoint tests (includes caching, filtering, format restrictions, async downloads)
+- **Key test coverage**: Dimension filtering with both levels-only and levels+codes variants, caching system, POST/GET request patterns, format restrictions, async download functionality, error validation
 
 ## Dependencies
 
@@ -122,11 +148,12 @@ Requires Python >=3.10
 When working with this client, note these key restrictions:
 
 - **Time series data**: Supports dataframe (default), CSV, and JSON formats
-- **Grid data**: Only supports CSV and Parquet formats (no JSON), returns pandas DataFrame  
+- **Grid data**: Only supports CSV and Parquet formats (no JSON), returns pandas DataFrame
 - **Dimension filtering**: Must provide at least one of: codes, levels, children, or children_include_self
 - **Analysis parameter**: Cannot be used with time series codes (only with selection_pk)
 - **Date parameters**: start_year/end_year should be year only (e.g., "2020", not "2020-01-01")
 - **Caching**: Only available for grid data, uses hash-based filenames
+- **Async downloads**: Async mode is enabled by default for grid data downloads to prevent timeouts. The client automatically polls until downloads are ready (up to 15 minutes by default). Use `use_async=False` to disable for small downloads if needed.
 - Default production API URL is `https://www.easydata.co.za/api/v3/`
 - We target to use the latest available Python version using uv, currently 3.13
 - When using uv sync, remember to do: `uv sync --extra dev`

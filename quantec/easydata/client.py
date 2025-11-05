@@ -16,6 +16,18 @@ load_dotenv()
 log = logging.getLogger(__name__)
 
 
+class AsyncDownloadTimeoutError(Exception):
+    """Raised when async download exceeds maximum polling attempts."""
+
+    pass
+
+
+class AsyncDownloadFailedError(Exception):
+    """Raised when async download fails, is cancelled, or expires."""
+
+    pass
+
+
 class Client:
     """Client for Quantec API.
 
@@ -323,6 +335,163 @@ class Client:
         log.debug(f"Found {len(selections_data)} selections")
         return out
 
+    def _poll_download_status(
+        self,
+        status_url: str,
+        download_id: int,
+        poll_interval: float,
+        max_poll_attempts: int,
+    ) -> dict:
+        """
+        Poll async download status until ready or timeout.
+
+        Parameters
+        ----------
+        status_url : str
+            Status endpoint URL to poll.
+        download_id : int
+            Download job ID for logging.
+        poll_interval : float
+            Seconds to wait between polling attempts.
+        max_poll_attempts : int
+            Maximum number of polling attempts before timeout.
+
+        Returns
+        -------
+        dict
+            Download information when ready.
+
+        Raises
+        ------
+        AsyncDownloadTimeoutError
+            If polling exceeds max_poll_attempts.
+        AsyncDownloadFailedError
+            If download status is cancelled, expired, or timeout.
+        requests.ConnectionError
+            If network issue occurs.
+        requests.HTTPError
+            If API request fails.
+
+        """
+        import time
+
+        headers = {"Authorization": f"Token {self.api_key}"}
+
+        for attempt in range(1, max_poll_attempts + 1):
+            time.sleep(poll_interval)
+
+            log.debug(
+                f"[Download {download_id}] -- Polling attempt {attempt}/{max_poll_attempts}"
+            )
+
+            try:
+                response = requests.get(status_url, headers=headers, allow_redirects=False)
+
+                # HTTP 302 means download is ready
+                if response.status_code == 302:
+                    log.debug(f"[Download {download_id}] -- Download ready (HTTP 302)")
+                    return {
+                        "status": "r",
+                        "download_url": response.headers.get("Location"),
+                    }
+
+                # HTTP 400 typically means still processing
+                if response.status_code == 400:
+                    # Try to get more info from response
+                    try:
+                        data = response.json()
+                        status = data.get("status", "b")
+                        if status == "b":
+                            continue  # Still busy, keep polling
+                    except ValueError:
+                        # If we can't parse JSON, assume still processing
+                        continue
+
+                # Try to parse response for status
+                response.raise_for_status()
+                data = response.json()
+                status = data.get("status", "b")
+
+                if status == "r":
+                    log.debug(f"[Download {download_id}] -- Download ready (status=r)")
+                    return data
+                elif status == "b":
+                    continue  # Still processing
+                elif status == "c":
+                    raise AsyncDownloadFailedError(
+                        f"Download {download_id} was cancelled"
+                    )
+                elif status == "x":
+                    raise AsyncDownloadFailedError(
+                        f"Download {download_id} has expired"
+                    )
+                elif status == "t":
+                    raise AsyncDownloadFailedError(
+                        f"Download {download_id} timed out on server"
+                    )
+
+            except requests.ConnectionError as e:
+                raise requests.ConnectionError(
+                    f"Network error while polling download {download_id}"
+                ) from e
+            except requests.HTTPError as e:
+                # If we got an HTTP error other than 400, raise it
+                if response.status_code != 400:
+                    raise requests.HTTPError(
+                        f"API request failed while polling download {download_id}: {response.text}"
+                    ) from e
+
+        # Exceeded maximum attempts
+        raise AsyncDownloadTimeoutError(
+            f"Download {download_id} exceeded maximum polling attempts ({max_poll_attempts})"
+        )
+
+    def _download_ready_file(
+        self,
+        download_url: str,
+        download_id: int,
+    ) -> requests.Response:
+        """
+        Download file from ready async download.
+
+        Parameters
+        ----------
+        download_url : str
+            URL to download the file from.
+        download_id : int
+            Download job ID for logging.
+
+        Returns
+        -------
+        requests.Response
+            Response object with file content.
+
+        Raises
+        ------
+        requests.ConnectionError
+            If network issue occurs.
+        requests.HTTPError
+            If download request fails.
+
+        """
+        log.debug(f"[Download {download_id}] -- Downloading file from {download_url}")
+
+        try:
+            response = requests.get(download_url)
+            response.raise_for_status()
+            log.debug(
+                f"[Download {download_id}] -- Successfully downloaded {len(response.content)} bytes"
+            )
+            return response
+        except requests.ConnectionError as e:
+            raise requests.ConnectionError(
+                f"Network error while downloading file for download {download_id}"
+            ) from e
+        except requests.HTTPError as e:
+            raise requests.HTTPError(
+                f"Failed to download file for download {download_id}: {response.text}"
+            ) from e
+
     def get_grid_data(
         self,
         recipe_pk: int,
@@ -333,6 +502,9 @@ class Client:
         has_tscodes: bool = False,
         has_dncodes: bool = False,
         freq: Optional[str] = None,
+        use_async: bool = True,
+        poll_interval: float = 5.0,
+        max_poll_attempts: int = 180,
     ) -> Union[pd.DataFrame, str, bytes]:
         """
         Fetch grid/pivot table data using recipe primary key.
@@ -359,6 +531,13 @@ class Client:
             Include dimension node codes in response. Defaults to False.
         freq : Optional[str], optional
             Data frequency ('M', 'Q', 'A'). Defaults to None.
+        use_async : bool, optional
+            Use async download mode. Defaults to True.
+            Set to False for synchronous downloads (may timeout for large datasets).
+        poll_interval : float, optional
+            Seconds between polling attempts for async downloads. Defaults to 5.0.
+        max_poll_attempts : int, optional
+            Maximum polling attempts before timeout. Defaults to 180 (15 minutes).
 
         Returns
         -------
@@ -376,6 +555,10 @@ class Client:
             If network issue occurs.
         ValueError
             If response parsing fails.
+        AsyncDownloadTimeoutError
+            If async download exceeds max_poll_attempts.
+        AsyncDownloadFailedError
+            If async download fails, is cancelled, or expires.
 
         """
         if resp_format not in ["dataframe", "parquet", "csv"]:
@@ -428,6 +611,8 @@ class Client:
             }
             if freq is not None:
                 request_data["valueSelect"] = freq
+            if use_async:
+                request_data["useAsync"] = True
 
             headers = {
                 "Authorization": f"Token {self.api_key}",
@@ -439,13 +624,37 @@ class Client:
                 if isinstance(selectdimensionnodes, dict)
                 else len(selectdimensionnodes)
             )
+            async_info = " (async mode)" if use_async else ""
             log.debug(
-                f"[{recipe_pk}] -- POST with {filter_count} dimension filter(s): {selectdimensionnodes}"
+                f"[{recipe_pk}] -- POST with {filter_count} dimension filter(s){async_info}: {selectdimensionnodes}"
             )
 
             try:
                 response = requests.post(url, json=request_data, headers=headers)
-                response.raise_for_status()
+
+                # Handle async download (HTTP 202)
+                if response.status_code == 202 and use_async:
+                    data = response.json()
+                    download_id = data["download"]["id"]
+                    status_url = data['status_url']
+
+                    log.debug(f"[{recipe_pk}] -- Async download initiated (ID: {download_id})")
+
+                    # Poll until ready
+                    status_info = self._poll_download_status(
+                        status_url, download_id, poll_interval, max_poll_attempts
+                    )
+
+                    # Download the ready file
+                    download_url = status_info.get("download_url")
+                    if not download_url:
+                        # If no download_url in response, try the status_url directly
+                        download_url = status_url
+
+                    response = self._download_ready_file(download_url, download_id)
+                else:
+                    response.raise_for_status()
+
             except requests.ConnectionError as e:
                 raise requests.ConnectionError(
                     "Network error: Unable to connect to API"
@@ -464,12 +673,38 @@ class Client:
             }
             if freq is not None:
                 query_params["valueSelect"] = freq
+            if use_async:
+                query_params["useAsync"] = True
 
-            log.debug(f"[{recipe_pk}] -- Querying with parameters: {query_params}")
+            async_info = " (async mode)" if use_async else ""
+            log.debug(f"[{recipe_pk}] -- Querying with parameters{async_info}: {query_params}")
 
             try:
                 response = requests.get(url, params=query_params)
-                response.raise_for_status()
+
+                # Handle async download (HTTP 202)
+                if response.status_code == 202 and use_async:
+                    data = response.json()
+                    download_id = data["download"]["id"]
+                    status_url = data['status_url']
+
+                    log.debug(f"[{recipe_pk}] -- Async download initiated (ID: {download_id})")
+
+                    # Poll until ready
+                    status_info = self._poll_download_status(
+                        status_url, download_id, poll_interval, max_poll_attempts
+                    )
+
+                    # Download the ready file
+                    download_url = status_info.get("download_url")
+                    if not download_url:
+                        # If no download_url in response, try the status_url directly
+                        download_url = status_url
+
+                    response = self._download_ready_file(download_url, download_id)
+                else:
+                    response.raise_for_status()
+
             except requests.ConnectionError as e:
                 raise requests.ConnectionError(
                     "Network error: Unable to connect to API"
