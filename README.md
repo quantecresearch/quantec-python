@@ -78,11 +78,20 @@ client = Client(
 ### Main Methods
 
 - get_data: Fetch time series or selection data.
-  - Parameters: `time_series_codes: Optional[str] = None`, `selection_pk: Optional[int] = None`, `freq: str = "A"`, `start_year: str = ""`, `end_year: str = ""`, `analysis: bool = False`, `resp_format: str = "csv"`, `is_tidy: bool = True`.
-  - Returns: DataFrame when `resp_format="csv"`, dict when `resp_format="json"`.
+  - Parameters:
+    - `time_series_codes: Optional[str] = None` - Comma-separated time series codes
+    - `selection_pk: Optional[int] = None` - Selection primary key (takes precedence over codes)
+    - `freq: str = "A"` - Data frequency ("M", "Q", "A")
+    - `start_year: str = ""` - Start year (yyyy)
+    - `end_year: str = ""` - End year (yyyy)
+    - `analysis: bool = False` - Include analysis (selection_pk only)
+    - `resp_format: str = "dataframe"` - Response format ("dataframe", "csv", "json")
+    - `is_tidy: bool = True` - Return tidy data
+  - Returns: DataFrame when `resp_format="dataframe"`, CSV string when `"csv"`, dict when `"json"`.
 
 - get_selections: Fetch user selections.
-  - Parameters: `status: Optional[str] = None` (status flags: U=Unsaved, P=Private, S=Shared, O=Open, W=Owner - e.g., "PSW" for Private and Shared selections owned by user).
+  - Parameters:
+    - `status: Optional[str] = None` - Status flags: U=Unsaved, P=Private, S=Shared, O=Open, W=Owner (e.g., "PSW" for Private and Shared selections owned by user)
   - Returns: DataFrame of selections.
 
 ### Direct Access with Codes
@@ -132,7 +141,16 @@ if len(selections) > 0:
   - Returns: DataFrame of recipes.
 
 - get_grid_data: Fetch grid/pivot data by recipe.
-  - Parameters: `recipe_pk: int`, `is_expanded: bool = False`, `is_melted: bool = True`, `resp_format: str = "dataframe"`, `selectdimensionnodes: dict | None = None`, `has_tscodes: bool = False`, `has_dncodes: bool = False`, `freq: Optional[str] = None`.
+  - Parameters:
+    - `recipe_pk: int` - Recipe primary key identifier
+    - `is_expanded: bool = False` - Return expanded data format
+    - `is_melted: bool = True` - Return melted data format
+    - `resp_format: str = "dataframe"` - Response format ("dataframe", "csv", "parquet")
+    - `selectdimensionnodes: dict | list[dict] | None = None` - Dimension filtering
+    - `has_tscodes: bool = False` - Include time series codes
+    - `has_dncodes: bool = False` - Include dimension node codes
+    - `is_sparse: bool = True` - Return sparse data format
+    - `freq: Optional[str] = None` - Data frequency ("M", "Q", "A")
   - Returns: DataFrame when `resp_format="dataframe"`, CSV string when `"csv"`, bytes when `"parquet"`.
 
 ### Basic Grid Data Access

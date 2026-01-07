@@ -501,6 +501,7 @@ class Client:
         selectdimensionnodes: Union[dict, list[dict]] = None,
         has_tscodes: bool = False,
         has_dncodes: bool = False,
+        is_sparse: bool = True,
         freq: Optional[str] = None,
         use_async: bool = True,
         poll_interval: float = 5.0,
@@ -529,6 +530,8 @@ class Client:
             Include time series codes in response. Defaults to False.
         has_dncodes : bool, optional
             Include dimension node codes in response. Defaults to False.
+        is_sparse : bool, optional
+            Return sparse data format. Defaults to True.
         freq : Optional[str], optional
             Data frequency ('M', 'Q', 'A'). Defaults to None.
         use_async : bool, optional
@@ -589,6 +592,7 @@ class Client:
                 normalized_filters_str,
                 has_tscodes,
                 has_dncodes,
+                is_sparse,
                 freq,
             )
             cached_grid = self.cache.read(cache_key, resp_format, api_format)
@@ -605,6 +609,7 @@ class Client:
                 "respFormat": api_format,
                 "isExpanded": is_expanded,
                 "isMelted": is_melted,
+                "isSparse": is_sparse,
                 "selectdimensionnodes": selectdimensionnodes,
                 "hasTimeSeriesCodes": has_tscodes,
                 "hasDimensionNodeCodes": has_dncodes,
@@ -667,6 +672,7 @@ class Client:
                 "respFormat": api_format,
                 "isExpanded": is_expanded,
                 "isMelted": is_melted,
+                "isSparse": is_sparse,
                 "auth_token": self.api_key,
                 "hasTimeSeriesCodes": has_tscodes,
                 "hasDimensionNodeCodes": has_dncodes,
