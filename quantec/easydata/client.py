@@ -215,9 +215,22 @@ class Client:
             except pd.errors.ParserError as e:
                 raise ValueError("Failed to parse CSV response") from e
 
-    def get_recipes(self) -> Union[pd.DataFrame, dict]:
+    def get_recipes(
+        self,
+        dataset: Optional[str] = None,
+        private: bool = False,
+    ) -> Union[pd.DataFrame, dict]:
         """
         Fetch available recipes from Quantec API.
+
+        Parameters
+        ----------
+        dataset : Optional[str], optional
+            Filter by dataset code. When provided, returns all recipes
+            (public + private) for that dataset.
+        private : bool, optional
+            If True, return only the user's private recipes
+            (excludes public and default public). Defaults to False.
 
         Returns
         -------
@@ -235,9 +248,15 @@ class Client:
 
         """
         url: str = f"{self.api_url}/recipes/"
+        params: dict[str, str] = {"auth_token": self.api_key}
+
+        if dataset:
+            params["dataset"] = dataset
+        if private:
+            params["private"] = "y"
 
         try:
-            response = requests.get(url, params={"auth_token": self.api_key})
+            response = requests.get(url, params=params)
             response.raise_for_status()
         except requests.ConnectionError as e:
             raise requests.ConnectionError(
