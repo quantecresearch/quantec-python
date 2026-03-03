@@ -428,6 +428,19 @@ class Client:
 
                 # Try to parse response for status
                 response.raise_for_status()
+
+                content_type = response.headers.get("Content-Type", "")
+                if "application/json" not in content_type:
+                    # API returned the file directly (e.g. text/csv, application/octet-stream)
+                    log.debug(
+                        f"[Download {download_id}] -- Download ready (file returned directly, Content-Type: {content_type})"
+                    )
+                    return {
+                        "status": "r",
+                        "download_url": status_url,
+                        "_response": response,
+                    }
+
                 data = response.json()
                 status = data.get("status", "b")
 
@@ -669,13 +682,14 @@ class Client:
                         status_url, download_id, poll_interval, max_poll_attempts
                     )
 
-                    # Download the ready file
-                    download_url = status_info.get("download_url")
-                    if not download_url:
-                        # If no download_url in response, try the status_url directly
-                        download_url = status_url
-
-                    response = self._download_ready_file(download_url, download_id)
+                    # Check if file was already returned directly during polling
+                    if "_response" in status_info:
+                        response = status_info["_response"]
+                    else:
+                        download_url = status_info.get("download_url")
+                        if not download_url:
+                            download_url = status_url
+                        response = self._download_ready_file(download_url, download_id)
                 else:
                     response.raise_for_status()
 
@@ -720,13 +734,14 @@ class Client:
                         status_url, download_id, poll_interval, max_poll_attempts
                     )
 
-                    # Download the ready file
-                    download_url = status_info.get("download_url")
-                    if not download_url:
-                        # If no download_url in response, try the status_url directly
-                        download_url = status_url
-
-                    response = self._download_ready_file(download_url, download_id)
+                    # Check if file was already returned directly during polling
+                    if "_response" in status_info:
+                        response = status_info["_response"]
+                    else:
+                        download_url = status_info.get("download_url")
+                        if not download_url:
+                            download_url = status_url
+                        response = self._download_ready_file(download_url, download_id)
                 else:
                     response.raise_for_status()
 
