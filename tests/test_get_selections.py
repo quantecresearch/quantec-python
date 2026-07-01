@@ -77,7 +77,7 @@ class TestGetSelections:
         # Validate field types (if we have data)
         if len(result) > 0:
             assert result["pk"].dtype in ["int64", "Int64"]
-            assert result["title"].dtype == "object"
+            assert pd.api.types.is_string_dtype(result["title"])
             assert result["code_count"].dtype in ["int64", "Int64"]
             assert result["is_owner"].dtype == "bool"
 

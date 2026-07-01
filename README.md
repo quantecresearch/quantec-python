@@ -15,6 +15,7 @@ The Quantec EasyData API is available to EasyData subscribers. To subscribe and 
 - ⚡ **Performance Caching**: Optional caching for time series and grid data
 - 🛡️ **Error Handling**: Comprehensive network and API error handling
 - 🔧 **Flexible Configuration**: Environment variables and parameter setup
+- 🔐 **Header Authentication**: API keys are sent via the `Authorization` header only
 
 ## Installation
 
@@ -52,6 +53,12 @@ On Windows (PowerShell):
 $env:EASYDATA_API_KEY = "your-api-key-here"
 $env:EASYDATA_API_URL = "https://www.easydata.co.za/api/v3/"
 ```
+
+### Authentication
+
+Quantec uses header-only API authentication. Provide your API key via `api_key` or
+`EASYDATA_API_KEY`; the client sends it as an `Authorization: Token ...` header.
+API keys are never added to query parameters.
 
 ### Client Options
 
@@ -92,6 +99,8 @@ client = Client(
 - get_selections: Fetch user selections.
   - Parameters:
     - `status: Optional[str] = None` - Status flags: U=Unsaved, P=Private, S=Shared, O=Open, W=Owner (e.g., "PSW" for Private and Shared selections owned by user)
+    - `show: Optional[str] = None` - Selection visibility filter passed through to the API
+    - `filter: Optional[str] = None` - Selection state filter passed through to the API
   - Returns: DataFrame of selections.
 
 ### Direct Access with Codes
@@ -318,6 +327,7 @@ grid_data = client.get_grid_data(
 - **Date parameters**: Use year format only (e.g., "2020", not "2020-01-01")
 - **Caching**: Available for time series and grid data by default
 - **Dimension filtering**: Must provide at least one of: codes, levels, children, or children_include_self. May provide a list of filters.
+- **Authentication**: API keys are sent in the `Authorization` header only, never as query parameters.
 
 ## License
 

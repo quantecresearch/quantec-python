@@ -74,6 +74,15 @@ class Client:
         # Initialize cache manager if caching is enabled
         self.cache = CacheManager(cache_dir) if use_cache else None
 
+    def _auth_headers(
+        self, extra_headers: Optional[dict[str, str]] = None
+    ) -> dict[str, str]:
+        """Return request headers with API token authentication."""
+        headers = {"Authorization": f"Token {self.api_key}"}
+        if extra_headers:
+            headers.update(extra_headers)
+        return headers
+
     def get_data(
         self,
         time_series_codes: Optional[str] = None,
@@ -175,7 +184,7 @@ class Client:
 
         try:
             response = requests.get(
-                url, params={**query_params, "auth_token": self.api_key}
+                url, params=query_params, headers=self._auth_headers()
             )
             response.raise_for_status()
         except requests.ConnectionError as e:
@@ -248,7 +257,7 @@ class Client:
 
         """
         url: str = f"{self.api_url}/recipes/"
-        params: dict[str, str] = {"auth_token": self.api_key}
+        params: dict[str, str] = {}
 
         if dataset:
             params["dataset"] = dataset
@@ -256,7 +265,7 @@ class Client:
             params["private"] = "y"
 
         try:
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, headers=self._auth_headers())
             response.raise_for_status()
         except requests.ConnectionError as e:
             raise requests.ConnectionError(
@@ -280,6 +289,8 @@ class Client:
     def get_selections(
         self,
         status: Optional[str] = None,
+        show: Optional[str] = None,
+        filter: Optional[str] = None,
     ) -> Union[pd.DataFrame, dict]:
         """
         Fetch user's available selections from Quantec API.
@@ -289,6 +300,10 @@ class Client:
         status : Optional[str], optional
             Filter by selection status using combined flags:
             U=Unsaved, P=Private, S=Shared, O=Open, W=Owner (e.g., "PSO").
+        show : Optional[str], optional
+            Selection visibility filter passed through to the API.
+        filter : Optional[str], optional
+            Selection state filter passed through to the API.
 
         Returns
         -------
@@ -308,15 +323,21 @@ class Client:
         """
         url: str = f"{self.api_url}/selections/"
 
-        query_params: dict[str, str] = {"auth_token": self.api_key, "format": "json"}
+        query_params: dict[str, str] = {"format": "json"}
 
         if status:
             query_params["status"] = status
+        if show:
+            query_params["show"] = show
+        if filter:
+            query_params["filter"] = filter
 
         log.debug(f"Querying selections with parameters: {query_params}")
 
         try:
-            response = requests.get(url, params=query_params)
+            response = requests.get(
+                url, params=query_params, headers=self._auth_headers()
+            )
             response.raise_for_status()
         except requests.ConnectionError as e:
             raise requests.ConnectionError(
@@ -394,7 +415,7 @@ class Client:
         """
         import time
 
-        headers = {"Authorization": f"Token {self.api_key}"}
+        headers = self._auth_headers()
 
         for attempt in range(1, max_poll_attempts + 1):
             time.sleep(poll_interval)
@@ -509,7 +530,7 @@ class Client:
         log.debug(f"[Download {download_id}] -- Downloading file from {download_url}")
 
         try:
-            response = requests.get(download_url)
+            response = requests.get(download_url, headers=self._auth_headers())
             response.raise_for_status()
             log.debug(
                 f"[Download {download_id}] -- Successfully downloaded {len(response.content)} bytes"
@@ -651,10 +672,7 @@ class Client:
             if use_async:
                 request_data["useAsync"] = True
 
-            headers = {
-                "Authorization": f"Token {self.api_key}",
-                "Content-Type": "application/json",
-            }
+            headers = self._auth_headers({"Content-Type": "application/json"})
 
             filter_count = (
                 1
@@ -706,7 +724,6 @@ class Client:
                 "isExpanded": is_expanded,
                 "isMelted": is_melted,
                 "isSparse": is_sparse,
-                "auth_token": self.api_key,
                 "hasTimeSeriesCodes": has_tscodes,
                 "hasDimensionNodeCodes": has_dncodes,
             }
@@ -719,7 +736,9 @@ class Client:
             log.debug(f"[{recipe_pk}] -- Querying with parameters{async_info}: {query_params}")
 
             try:
-                response = requests.get(url, params=query_params)
+                response = requests.get(
+                    url, params=query_params, headers=self._auth_headers()
+                )
 
                 # Handle async download (HTTP 202)
                 if response.status_code == 202 and use_async:

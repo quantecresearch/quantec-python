@@ -9,7 +9,11 @@ import pytest
 import pandas as pd
 import requests
 from io import StringIO, BytesIO
-from quantec.easydata.client import Client
+from quantec.easydata.client import (
+    AsyncDownloadFailedError,
+    AsyncDownloadTimeoutError,
+    Client,
+)
 
 
 class FakeResponse:
@@ -103,6 +107,62 @@ class TestPollDownloadDirectResponse:
         assert result["status"] == "r"
         assert result["download_url"] == "http://fake/file.csv"
         assert "_response" not in result
+
+
+class TestPollDownloadErrors:
+    """Test async polling error states."""
+
+    @pytest.fixture
+    def client(self):
+        return Client(api_key="test-key", api_url="http://fake", use_cache=False)
+
+    def test_timeout_when_max_poll_attempts_exceeded(self, client, monkeypatch):
+        """Busy status should eventually raise AsyncDownloadTimeoutError."""
+        import json
+
+        resp = FakeResponse(
+            status_code=200,
+            headers={"Content-Type": "application/json"},
+            text=json.dumps({"status": "b"}),
+        )
+        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+
+        with pytest.raises(AsyncDownloadTimeoutError, match="exceeded maximum polling attempts"):
+            client._poll_download_status(
+                status_url="http://fake/griddownloads/1/",
+                download_id=1,
+                poll_interval=0,
+                max_poll_attempts=2,
+            )
+
+    @pytest.mark.parametrize(
+        ("status", "message"),
+        [
+            ("c", "was cancelled"),
+            ("x", "has expired"),
+            ("t", "timed out on server"),
+        ],
+    )
+    def test_failed_statuses_raise_async_download_failed_error(
+        self, client, monkeypatch, status, message
+    ):
+        """Terminal failure statuses should raise AsyncDownloadFailedError."""
+        import json
+
+        resp = FakeResponse(
+            status_code=200,
+            headers={"Content-Type": "application/json"},
+            text=json.dumps({"status": status}),
+        )
+        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+
+        with pytest.raises(AsyncDownloadFailedError, match=message):
+            client._poll_download_status(
+                status_url="http://fake/griddownloads/1/",
+                download_id=1,
+                poll_interval=0,
+                max_poll_attempts=1,
+            )
 
 
 class TestGetGridDataDirectResponse:

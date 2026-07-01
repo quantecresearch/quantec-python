@@ -29,6 +29,7 @@ The project follows a simple modular structure:
 - Optional caching system for grid data with hash-based filenames and automatic cache management
 - Advanced filtering via `selectdimensionnodes` parameter for dimension-based grid data filtering
 - Uses environment variables for configuration (EASYDATA_API_KEY, EASYDATA_API_URL)
+- Uses header-only API authentication (`Authorization: Token ...`); API keys must not be sent as query parameters
 - Comprehensive error handling for network, HTTP, and parsing errors
 - POST/GET request handling - POST for filtered grid data, GET for standard requests
 
@@ -154,6 +155,7 @@ When working with this client, note these key restrictions:
 - **Date parameters**: start_year/end_year should be year only (e.g., "2020", not "2020-01-01")
 - **Caching**: Only available for grid data, uses hash-based filenames
 - **Async downloads**: Async mode is enabled by default for grid data downloads to prevent timeouts. The client automatically polls until downloads are ready (up to 15 minutes by default). Use `use_async=False` to disable for small downloads if needed.
+- Authentication must use the `Authorization` header only; do not add API keys to request query parameters
 - Default production API URL is `https://www.easydata.co.za/api/v3/`
 - We target to use the latest available Python version using uv, currently 3.13
 - When using uv sync, remember to do: `uv sync --extra dev`
