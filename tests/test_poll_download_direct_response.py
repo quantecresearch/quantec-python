@@ -52,7 +52,7 @@ class TestPollDownloadDirectResponse:
             text=CSV_BODY,
             content=CSV_BODY.encode(),
         )
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+        monkeypatch.setattr(client.session, "get", lambda *a, **kw: resp)
 
         result = client._poll_download_status(
             status_url="http://fake/griddownloads/1/",
@@ -72,7 +72,7 @@ class TestPollDownloadDirectResponse:
             headers={"Content-Type": "application/octet-stream"},
             content=PARQUET_BODY,
         )
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+        monkeypatch.setattr(client.session, "get", lambda *a, **kw: resp)
 
         result = client._poll_download_status(
             status_url="http://fake/griddownloads/1/",
@@ -94,7 +94,7 @@ class TestPollDownloadDirectResponse:
             headers={"Content-Type": "application/json"},
             text=body,
         )
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+        monkeypatch.setattr(client.session, "get", lambda *a, **kw: resp)
 
         result = client._poll_download_status(
             status_url="http://fake/griddownloads/1/",
@@ -124,7 +124,7 @@ class TestPollDownloadErrors:
             headers={"Content-Type": "application/json"},
             text=json.dumps({"status": "b"}),
         )
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+        monkeypatch.setattr(client.session, "get", lambda *a, **kw: resp)
 
         with pytest.raises(AsyncDownloadTimeoutError, match="exceeded maximum polling attempts"):
             client._poll_download_status(
@@ -153,7 +153,7 @@ class TestPollDownloadErrors:
             headers={"Content-Type": "application/json"},
             text=json.dumps({"status": status}),
         )
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: resp)
+        monkeypatch.setattr(client.session, "get", lambda *a, **kw: resp)
 
         with pytest.raises(AsyncDownloadFailedError, match=message):
             client._poll_download_status(
@@ -203,7 +203,7 @@ class TestGetGridDataDirectResponse:
                     content=CSV_BODY.encode(),
                 )
 
-        monkeypatch.setattr(requests, "get", fake_get)
+        monkeypatch.setattr(client.session, "get", fake_get)
 
         result = client.get_grid_data(
             recipe_pk=1,
@@ -231,7 +231,7 @@ class TestGetGridDataDirectResponse:
                     content=PARQUET_BODY,
                 )
 
-        monkeypatch.setattr(requests, "get", fake_get)
+        monkeypatch.setattr(client.session, "get", fake_get)
 
         result = client.get_grid_data(
             recipe_pk=1,
@@ -247,7 +247,7 @@ class TestGetGridDataDirectResponse:
     def test_get_grid_data_post_path_direct_response(self, client, monkeypatch):
         """get_grid_data should handle direct response on the POST path (with filters)."""
         monkeypatch.setattr(
-            requests,
+            client.session,
             "post",
             lambda *a, **kw: self._make_202_response(),
         )
@@ -258,7 +258,7 @@ class TestGetGridDataDirectResponse:
             text=CSV_BODY,
             content=CSV_BODY.encode(),
         )
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: csv_resp)
+        monkeypatch.setattr(client.session, "get", lambda *a, **kw: csv_resp)
 
         result = client.get_grid_data(
             recipe_pk=1,

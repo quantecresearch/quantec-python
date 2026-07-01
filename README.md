@@ -60,6 +60,14 @@ Quantec uses header-only API authentication. Provide your API key via `api_key` 
 `EASYDATA_API_KEY`; the client sends it as an `Authorization: Token ...` header.
 API keys are never added to query parameters.
 
+The client also sends a default User-Agent of `quantec-python/<version>`. Apps can
+identify themselves by passing a product prefix:
+
+```python
+client = Client(user_agent="easydata-cli/0.3.0")
+# Sends: User-Agent: easydata-cli/0.3.0 quantec-python/<version>
+```
+
 ### Client Options
 
 ```python
@@ -77,6 +85,8 @@ client = Client(
     api_url=None,  # default: EASYDATA_API_URL or "https://www.easydata.co.za/api/v3"
     use_cache=True,
     cache_dir="cache",
+    user_agent=None,  # optional product identifier, e.g. "easydata-cli/0.3.0"
+    headers=None,     # optional additional default request headers
 )
 ```
 

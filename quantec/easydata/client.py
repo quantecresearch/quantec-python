@@ -1,7 +1,9 @@
 import logging
 import os
+from collections.abc import Mapping
 from io import StringIO, BytesIO
 from typing import Optional, Union
+from urllib.parse import urlparse
 
 import pandas as pd
 import requests
@@ -41,6 +43,10 @@ class Client:
         Enable caching for time series and grid data. Defaults to True.
     cache_dir : str, optional
         Directory for cached files. Defaults to 'cache'.
+    user_agent : Optional[str], optional
+        Product User-Agent prefix. Defaults to None.
+    headers : Optional[Mapping[str, str]], optional
+        Additional default headers for outbound requests. Defaults to None.
 
     Raises
     ------
@@ -55,6 +61,8 @@ class Client:
         api_url: Optional[str] = None,
         use_cache: bool = True,
         cache_dir: str = "cache",
+        user_agent: Optional[str] = None,
+        headers: Optional[Mapping[str, str]] = None,
     ) -> None:
         api_key = api_key or os.getenv("EASYDATA_API_KEY")
         api_url = (
@@ -71,6 +79,22 @@ class Client:
         self.api_key: str = api_key
         self.api_url: str = api_url.rstrip("/")
 
+        package_user_agent = f"quantec-python/{__version__}"
+        self.user_agent = (
+            f"{user_agent} {package_user_agent}" if user_agent else package_user_agent
+        )
+        self.session = requests.Session()
+        if headers:
+            self.session.headers.update(
+                {
+                    key: value
+                    for key, value in headers.items()
+                    if key.lower() != "authorization"
+                }
+            )
+        # User-Agent is first-class and should not be accidentally overridden.
+        self.session.headers["User-Agent"] = self.user_agent
+
         # Initialize cache manager if caching is enabled
         self.cache = CacheManager(cache_dir) if use_cache else None
 
@@ -82,6 +106,17 @@ class Client:
         if extra_headers:
             headers.update(extra_headers)
         return headers
+
+    def _is_easydata_api_url(self, url: str) -> bool:
+        """Return True when a URL points at the configured EasyData API host."""
+        api_parts = urlparse(self.api_url)
+        url_parts = urlparse(url)
+        if not url_parts.netloc:
+            return True
+        return (url_parts.scheme, url_parts.netloc) == (
+            api_parts.scheme,
+            api_parts.netloc,
+        )
 
     def get_data(
         self,
@@ -183,7 +218,7 @@ class Client:
                 return cached  # type: ignore[return-value]
 
         try:
-            response = requests.get(
+            response = self.session.get(
                 url, params=query_params, headers=self._auth_headers()
             )
             response.raise_for_status()
@@ -265,7 +300,9 @@ class Client:
             params["private"] = "y"
 
         try:
-            response = requests.get(url, params=params, headers=self._auth_headers())
+            response = self.session.get(
+                url, params=params, headers=self._auth_headers()
+            )
             response.raise_for_status()
         except requests.ConnectionError as e:
             raise requests.ConnectionError(
@@ -335,7 +372,7 @@ class Client:
         log.debug(f"Querying selections with parameters: {query_params}")
 
         try:
-            response = requests.get(
+            response = self.session.get(
                 url, params=query_params, headers=self._auth_headers()
             )
             response.raise_for_status()
@@ -425,7 +462,9 @@ class Client:
             )
 
             try:
-                response = requests.get(status_url, headers=headers, allow_redirects=False)
+                response = self.session.get(
+                    status_url, headers=headers, allow_redirects=False
+                )
 
                 # HTTP 302 means download is ready
                 if response.status_code == 302:
@@ -549,7 +588,12 @@ class Client:
         log.debug(f"[Download {download_id}] -- Downloading file from {download_url}")
 
         try:
-            response = requests.get(download_url, headers=self._auth_headers())
+            headers = (
+                self._auth_headers()
+                if self._is_easydata_api_url(download_url)
+                else None
+            )
+            response = self.session.get(download_url, headers=headers)
             response.raise_for_status()
             log.debug(
                 f"[Download {download_id}] -- Successfully downloaded {len(response.content)} bytes"
@@ -704,7 +748,7 @@ class Client:
             )
 
             try:
-                response = requests.post(url, json=request_data, headers=headers)
+                response = self.session.post(url, json=request_data, headers=headers)
 
                 # Handle async download (HTTP 202)
                 if response.status_code == 202 and use_async:
@@ -749,7 +793,7 @@ class Client:
             log.debug(f"[{recipe_pk}] -- Querying with parameters{async_info}: {query_params}")
 
             try:
-                response = requests.get(
+                response = self.session.get(
                     url, params=query_params, headers=self._auth_headers()
                 )
 
