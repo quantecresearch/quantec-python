@@ -228,7 +228,7 @@ class Client:
         self,
         dataset: Optional[str] = None,
         private: bool = False,
-    ) -> Union[pd.DataFrame, dict]:
+    ) -> pd.DataFrame:
         """
         Fetch available recipes from Quantec API.
 
@@ -291,7 +291,7 @@ class Client:
         status: Optional[str] = None,
         show: Optional[str] = None,
         filter: Optional[str] = None,
-    ) -> Union[pd.DataFrame, dict]:
+    ) -> pd.DataFrame:
         """
         Fetch user's available selections from Quantec API.
 
@@ -499,6 +499,25 @@ class Client:
             f"Download {download_id} exceeded maximum polling attempts ({max_poll_attempts})"
         )
 
+    def _resolve_async_download_response(
+        self,
+        status_url: str,
+        download_id: int,
+        poll_interval: float,
+        max_poll_attempts: int,
+    ) -> requests.Response:
+        """Poll an async download and return the ready file response."""
+        status_info = self._poll_download_status(
+            status_url, download_id, poll_interval, max_poll_attempts
+        )
+
+        # The status endpoint may return the file content directly.
+        if "_response" in status_info:
+            return status_info["_response"]
+
+        download_url = status_info.get("download_url") or status_url
+        return self._download_ready_file(download_url, download_id)
+
     def _download_ready_file(
         self,
         download_url: str,
@@ -551,7 +570,7 @@ class Client:
         is_expanded: bool = False,
         is_melted: bool = True,
         resp_format: str = "dataframe",
-        selectdimensionnodes: Union[dict, list[dict]] = None,
+        selectdimensionnodes: Optional[Union[dict, list[dict]]] = None,
         has_tscodes: bool = False,
         has_dncodes: bool = False,
         is_sparse: bool = True,
@@ -573,7 +592,7 @@ class Client:
             Return melted data format. Defaults to True.
         resp_format : str, optional
             Response format ('dataframe', 'parquet', or 'csv'). Defaults to 'dataframe'.
-        selectdimensionnodes : Union[dict, list[dict]], optional
+        selectdimensionnodes : Optional[Union[dict, list[dict]]], optional
             Dimension filtering. Single dict or list of dicts for multiple dimensions.
             Example single: {"dimension": "d1", "codes": ["CODE1"]}.
             Example multiple: [{"dimension": "d1", "codes": ["CODE1"]}, {"dimension": "d2", "levels": [2]}].
@@ -691,23 +710,17 @@ class Client:
                 if response.status_code == 202 and use_async:
                     data = response.json()
                     download_id = data["download"]["id"]
-                    status_url = data['status_url']
+                    status_url = data["status_url"]
 
-                    log.debug(f"[{recipe_pk}] -- Async download initiated (ID: {download_id})")
-
-                    # Poll until ready
-                    status_info = self._poll_download_status(
-                        status_url, download_id, poll_interval, max_poll_attempts
+                    log.debug(
+                        f"[{recipe_pk}] -- Async download initiated (ID: {download_id})"
                     )
-
-                    # Check if file was already returned directly during polling
-                    if "_response" in status_info:
-                        response = status_info["_response"]
-                    else:
-                        download_url = status_info.get("download_url")
-                        if not download_url:
-                            download_url = status_url
-                        response = self._download_ready_file(download_url, download_id)
+                    response = self._resolve_async_download_response(
+                        status_url,
+                        download_id,
+                        poll_interval,
+                        max_poll_attempts,
+                    )
                 else:
                     response.raise_for_status()
 
@@ -744,23 +757,17 @@ class Client:
                 if response.status_code == 202 and use_async:
                     data = response.json()
                     download_id = data["download"]["id"]
-                    status_url = data['status_url']
+                    status_url = data["status_url"]
 
-                    log.debug(f"[{recipe_pk}] -- Async download initiated (ID: {download_id})")
-
-                    # Poll until ready
-                    status_info = self._poll_download_status(
-                        status_url, download_id, poll_interval, max_poll_attempts
+                    log.debug(
+                        f"[{recipe_pk}] -- Async download initiated (ID: {download_id})"
                     )
-
-                    # Check if file was already returned directly during polling
-                    if "_response" in status_info:
-                        response = status_info["_response"]
-                    else:
-                        download_url = status_info.get("download_url")
-                        if not download_url:
-                            download_url = status_url
-                        response = self._download_ready_file(download_url, download_id)
+                    response = self._resolve_async_download_response(
+                        status_url,
+                        download_id,
+                        poll_interval,
+                        max_poll_attempts,
+                    )
                 else:
                     response.raise_for_status()
 

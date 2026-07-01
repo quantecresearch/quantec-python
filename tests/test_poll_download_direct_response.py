@@ -8,7 +8,6 @@ Previously this caused a JSONDecodeError.
 import pytest
 import pandas as pd
 import requests
-from io import StringIO, BytesIO
 from quantec.easydata.client import (
     AsyncDownloadFailedError,
     AsyncDownloadTimeoutError,
