@@ -31,6 +31,7 @@ The project follows a simple modular structure:
 - Uses environment variables for configuration (EASYDATA_API_KEY, EASYDATA_API_URL)
 - Uses header-only API authentication (`Authorization: Token ...`); API keys must not be sent as query parameters
 - Comprehensive error handling for network, HTTP, and parsing errors
+- Automatic backoff/retry on API rate limits (HTTP 429): honours `Retry-After`, retries up to 3 times, fails fast with a RuntimeError when the wait exceeds 60s
 - POST/GET request handling - POST for filtered grid data, GET for standard requests
 
 ### Typical Workflow Patterns:

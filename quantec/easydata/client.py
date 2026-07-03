@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from collections.abc import Mapping
 from io import StringIO, BytesIO
 from typing import Optional, Union
@@ -16,6 +17,22 @@ from . import validators
 load_dotenv()
 
 log = logging.getLogger(__name__)
+
+# Retries after the first attempt when throttled (HTTP 429).
+MAX_RETRIES = 3
+# A Retry-After longer than this fails fast instead of blocking the caller.
+MAX_RETRY_AFTER = 60.0
+
+
+def _retry_after_seconds(response: requests.Response, attempt: int) -> float:
+    """Wait time for a 429: the Retry-After header, else exponential backoff."""
+    header = response.headers.get("Retry-After")
+    if header is not None:
+        try:
+            return max(float(header), 0.0)
+        except ValueError:
+            pass
+    return float(2**attempt)
 
 
 class AsyncDownloadTimeoutError(Exception):
@@ -106,6 +123,35 @@ class Client:
         if extra_headers:
             headers.update(extra_headers)
         return headers
+
+    def _get(self, url: str, **kwargs) -> requests.Response:
+        """session.get with backoff/retry when throttled (HTTP 429)."""
+        return self._request_with_backoff(lambda: self.session.get(url, **kwargs))
+
+    def _post(self, url: str, **kwargs) -> requests.Response:
+        """session.post with backoff/retry when throttled (HTTP 429)."""
+        return self._request_with_backoff(lambda: self.session.post(url, **kwargs))
+
+    def _request_with_backoff(self, send) -> requests.Response:
+        """Retry throttled requests, honouring the API's Retry-After header.
+
+        Sleeps and retries up to MAX_RETRIES times; a wait longer than
+        MAX_RETRY_AFTER (or running out of retries) raises a RuntimeError
+        telling the caller when to try again.
+        """
+        for attempt in range(MAX_RETRIES + 1):
+            response = send()
+            if response.status_code != 429:
+                return response
+            wait = _retry_after_seconds(response, attempt)
+            if wait > MAX_RETRY_AFTER or attempt == MAX_RETRIES:
+                raise RuntimeError(
+                    f"Rate limited by the API (HTTP 429). "
+                    f"Try again in {int(wait) or 1}s."
+                )
+            log.debug(f"Rate limited (HTTP 429); retrying in {wait}s")
+            time.sleep(wait)
+        raise AssertionError("unreachable")
 
     def _is_easydata_api_url(self, url: str) -> bool:
         """Return True when a URL points at the configured EasyData API host."""
@@ -218,7 +264,7 @@ class Client:
                 return cached  # type: ignore[return-value]
 
         try:
-            response = self.session.get(
+            response = self._get(
                 url, params=query_params, headers=self._auth_headers()
             )
             response.raise_for_status()
@@ -300,7 +346,7 @@ class Client:
             params["private"] = "y"
 
         try:
-            response = self.session.get(
+            response = self._get(
                 url, params=params, headers=self._auth_headers()
             )
             response.raise_for_status()
@@ -372,7 +418,7 @@ class Client:
         log.debug(f"Querying selections with parameters: {query_params}")
 
         try:
-            response = self.session.get(
+            response = self._get(
                 url, params=query_params, headers=self._auth_headers()
             )
             response.raise_for_status()
@@ -450,8 +496,6 @@ class Client:
             If API request fails.
 
         """
-        import time
-
         headers = self._auth_headers()
 
         for attempt in range(1, max_poll_attempts + 1):
@@ -462,7 +506,7 @@ class Client:
             )
 
             try:
-                response = self.session.get(
+                response = self._get(
                     status_url, headers=headers, allow_redirects=False
                 )
 
@@ -593,7 +637,7 @@ class Client:
                 if self._is_easydata_api_url(download_url)
                 else None
             )
-            response = self.session.get(download_url, headers=headers)
+            response = self._get(download_url, headers=headers)
             response.raise_for_status()
             log.debug(
                 f"[Download {download_id}] -- Successfully downloaded {len(response.content)} bytes"
@@ -748,7 +792,7 @@ class Client:
             )
 
             try:
-                response = self.session.post(url, json=request_data, headers=headers)
+                response = self._post(url, json=request_data, headers=headers)
 
                 # Handle async download (HTTP 202)
                 if response.status_code == 202 and use_async:
@@ -793,7 +837,7 @@ class Client:
             log.debug(f"[{recipe_pk}] -- Querying with parameters{async_info}: {query_params}")
 
             try:
-                response = self.session.get(
+                response = self._get(
                     url, params=query_params, headers=self._auth_headers()
                 )
 
