@@ -99,6 +99,18 @@ class TestGetGridData:
         assert isinstance(result, pd.DataFrame)
         # Result might be empty if filter returns no data, but should be valid DataFrame
 
+    def test_get_grid_data_with_single_dict_filter(
+        self, test_client, test_recipe_pk, test_dimension_filter
+    ):
+        """Test that a single dict filter is accepted without wrapping in a list."""
+        result = test_client.get_grid_data(
+            recipe_pk=test_recipe_pk,
+            selectdimensionnodes=test_dimension_filter,
+            resp_format="dataframe",
+        )
+
+        assert isinstance(result, pd.DataFrame)
+
     def test_get_grid_data_with_dimension_filter_codes(
         self, test_client, test_recipe_pk, test_dimension_filter_w_codes
     ):

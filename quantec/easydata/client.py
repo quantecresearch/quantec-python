@@ -764,13 +764,19 @@ class Client:
 
         # Use POST if filtering (non-empty), GET otherwise
         if selectdimensionnodes is not None:
-            # POST request for filtering
+            # POST request for filtering. The API expects a list of filter
+            # objects, so a single dict is wrapped.
+            filters = (
+                [selectdimensionnodes]
+                if isinstance(selectdimensionnodes, dict)
+                else selectdimensionnodes
+            )
             request_data = {
                 "respFormat": api_format,
                 "isExpanded": is_expanded,
                 "isMelted": is_melted,
                 "isSparse": is_sparse,
-                "selectdimensionnodes": selectdimensionnodes,
+                "selectdimensionnodes": filters,
                 "hasTimeSeriesCodes": has_tscodes,
                 "hasDimensionNodeCodes": has_dncodes,
             }

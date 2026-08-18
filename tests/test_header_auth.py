@@ -216,4 +216,5 @@ def test_get_grid_data_post_uses_header_auth_only(monkeypatch):
 
     assert_header_auth_only(client, calls[0])
     assert merged_headers(client, calls[0])["Content-Type"] == "application/json"
-    assert calls[0]["json"]["selectdimensionnodes"] == {"dimension": "d1", "codes": ["X"]}
+    # A single dict filter is wrapped in a list for the API
+    assert calls[0]["json"]["selectdimensionnodes"] == [{"dimension": "d1", "codes": ["X"]}]
